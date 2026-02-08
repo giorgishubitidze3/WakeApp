@@ -8,11 +8,17 @@ import AlarmKit
 #endif
 
 final class WakeAppNotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    static let alarmCategoryIdentifier = "wakeapp.alarm.category"
+    static let snoozeActionIdentifier = "wakeapp.alarm.action.snooze"
+    static let stopActionIdentifier = "wakeapp.alarm.action.stop"
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil
     ) -> Bool {
-        UNUserNotificationCenter.current().delegate = self
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.setNotificationCategories([Self.alarmCategory])
         return true
     }
 
@@ -35,7 +41,29 @@ final class WakeAppNotificationDelegate: NSObject, UIApplicationDelegate, UNUser
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         NSLog("WakeApp: notification interaction received id=\(response.notification.request.identifier)")
-        completionHandler()
+        Task {
+            await WakeAppAlarmEngine.shared.handleNotificationResponse(response)
+            completionHandler()
+        }
+    }
+
+    private static var alarmCategory: UNNotificationCategory {
+        let snoozeAction = UNNotificationAction(
+            identifier: snoozeActionIdentifier,
+            title: "Snooze",
+            options: []
+        )
+        let stopAction = UNNotificationAction(
+            identifier: stopActionIdentifier,
+            title: "Stop",
+            options: [.destructive]
+        )
+        return UNNotificationCategory(
+            identifier: alarmCategoryIdentifier,
+            actions: [snoozeAction, stopAction],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
     }
 }
 
@@ -117,6 +145,26 @@ private actor WakeAppAlarmEngine {
     private let alarmKitIDMapKey = "wakeapp.alarmkit.id.map"
     private let maxPendingNotifications = 64
     private let maxQueueDays = 7
+
+    func handleNotificationResponse(_ response: UNNotificationResponse) async {
+        let requestID = response.notification.request.identifier
+        notificationCenter.removeDeliveredNotifications(withIdentifiers: [requestID])
+        notificationCenter.removePendingNotificationRequests(withIdentifiers: [requestID])
+
+        switch response.actionIdentifier {
+        case WakeAppNotificationDelegate.snoozeActionIdentifier:
+            let snoozeMinutes = extractSnoozeMinutes(from: response.notification.request.content.userInfo)
+            await scheduleSnoozedNotification(
+                originalContent: response.notification.request.content,
+                snoozeMinutes: snoozeMinutes
+            )
+            NSLog("WakeApp: snoozed notification id=\(requestID) by \(snoozeMinutes) minutes.")
+        case WakeAppNotificationDelegate.stopActionIdentifier:
+            NSLog("WakeApp: stopped notification id=\(requestID).")
+        default:
+            break
+        }
+    }
 
     func syncFromStoredPlans() async {
         let activePlans = loadPlans().filter {
@@ -346,6 +394,13 @@ private actor WakeAppAlarmEngine {
         content.title = "WakeApp Alarm"
         content.body = "Interval alarm at \(occurrence.time.uiLabel)"
         content.sound = .default
+        content.categoryIdentifier = WakeAppNotificationDelegate.alarmCategoryIdentifier
+        content.userInfo = [
+            UserInfoKeys.planID: occurrence.planID,
+            UserInfoKeys.hour: occurrence.time.hour,
+            UserInfoKeys.minute: occurrence.time.minute,
+            UserInfoKeys.snoozeMinutes: occurrence.snoozeMinutes
+        ]
         if #available(iOS 15.0, *) {
             content.interruptionLevel = .timeSensitive
         }
@@ -407,7 +462,8 @@ private actor WakeAppAlarmEngine {
                             planID: plan.id,
                             time: time,
                             dayOffset: dayOffset,
-                            triggerDate: triggerDate
+                            triggerDate: triggerDate,
+                            snoozeMinutes: plan.snoozeMinutes
                         )
                     )
                 }
@@ -477,6 +533,58 @@ private actor WakeAppAlarmEngine {
             current += intervalMinutes
         }
         return result
+    }
+
+    private func extractSnoozeMinutes(from userInfo: [AnyHashable: Any]) -> Int {
+        if let value = userInfo[UserInfoKeys.snoozeMinutes] as? Int {
+            return max(1, value)
+        }
+        if let value = userInfo[UserInfoKeys.snoozeMinutes] as? NSNumber {
+            return max(1, value.intValue)
+        }
+        return defaultSnoozeMinutes
+    }
+
+    private func scheduleSnoozedNotification(
+        originalContent: UNNotificationContent,
+        snoozeMinutes: Int
+    ) async {
+        let content = (originalContent.mutableCopy() as? UNMutableNotificationContent)
+            ?? UNMutableNotificationContent()
+        content.title = originalContent.title
+        content.body = originalContent.body
+        content.sound = .default
+        content.categoryIdentifier = WakeAppNotificationDelegate.alarmCategoryIdentifier
+        var updatedUserInfo = originalContent.userInfo
+        updatedUserInfo[UserInfoKeys.snoozeMinutes] = snoozeMinutes
+        content.userInfo = updatedUserInfo
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = .timeSensitive
+        }
+
+        let triggerDate = Date().addingTimeInterval(TimeInterval(snoozeMinutes * 60))
+        let dateComponents = calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: triggerDate
+        )
+        let trigger = UNCalendarNotificationTrigger(
+            dateMatching: dateComponents,
+            repeats: false
+        )
+        let request = UNNotificationRequest(
+            identifier: "\(requestPrefix)_snooze_\(UUID().uuidString)",
+            content: content,
+            trigger: trigger
+        )
+
+        _ = await withCheckedContinuation { continuation in
+            notificationCenter.add(request) { error in
+                if let error {
+                    NSLog("WakeApp: failed to schedule snooze notification: \(error.localizedDescription)")
+                }
+                continuation.resume(returning: ())
+            }
+        }
     }
 }
 
@@ -564,6 +672,7 @@ private struct QueuedNotificationOccurrence {
     let time: StoredTimeOfDay
     let dayOffset: Int
     let triggerDate: Date
+    let snoozeMinutes: Int
 
     var requestID: String {
         let hourLabel = String(format: "%02d", time.hour)
@@ -571,6 +680,15 @@ private struct QueuedNotificationOccurrence {
         return "wakeapp_interval_\(planID)_\(dayOffset)_\(hourLabel)\(minuteLabel)"
     }
 }
+
+private enum UserInfoKeys {
+    static let planID = "planId"
+    static let hour = "hour"
+    static let minute = "minute"
+    static let snoozeMinutes = "snoozeMinutes"
+}
+
+private let defaultSnoozeMinutes = 5
 
 #if canImport(AlarmKit)
 @available(iOS 26.0, *)
