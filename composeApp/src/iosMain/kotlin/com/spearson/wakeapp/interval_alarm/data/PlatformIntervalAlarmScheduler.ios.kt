@@ -23,7 +23,6 @@ import platform.Foundation.NSCalendarUnitMonth
 import platform.Foundation.NSCalendarUnitSecond
 import platform.Foundation.NSCalendarUnitWeekday
 import platform.Foundation.NSCalendarUnitYear
-import platform.Foundation.NSClassFromString
 import platform.Foundation.NSDate
 import platform.Foundation.NSDateComponents
 import platform.Foundation.NSLog
@@ -87,20 +86,12 @@ class PlatformIntervalAlarmScheduler(
     private suspend fun syncAllPlans(): Result<Unit> {
         return runCatching {
             syncMutex.withLock {
-                if (requestNativeBridgeSync()) {
-                    return@withLock
-                }
+                requestNativeBridgeSync()
 
                 val plans = intervalAlarmPlanRepository.getPlans().getOrElse { throw it }
                 val enabledPlans = plans.filter { it.isEnabled && it.activeDays.isNotEmpty() && it.intervalMinutes > 0 }
 
                 if (enabledPlans.isEmpty()) {
-                    clearWakeRequests()
-                    return@withLock
-                }
-
-                val alarmKitResult = scheduleWithAlarmKitIfAvailable(enabledPlans)
-                if (alarmKitResult == AlarmKitSyncResult.Synced) {
                     clearWakeRequests()
                     return@withLock
                 }
@@ -123,37 +114,12 @@ class PlatformIntervalAlarmScheduler(
             }
         }
     }
-
-    private fun scheduleWithAlarmKitIfAvailable(plans: List<IntervalAlarmPlan>): AlarmKitSyncResult {
-        if (plans.isEmpty()) return AlarmKitSyncResult.NotAvailable
-        if (!isAlarmKitSupportedAtRuntime()) {
-            return AlarmKitSyncResult.NotAvailable
-        }
-
-        // AlarmKit symbols are not yet exposed in this Kotlin/Native toolchain.
-        // Once available, this branch should schedule native alarm sessions and return Synced.
-        NSLog("WakeApp: AlarmKit detected but fallbacking to UserNotifications until Kotlin bindings are available.")
-        return AlarmKitSyncResult.NotAvailable
-    }
-
-    @OptIn(BetaInteropApi::class)
-    private fun requestNativeBridgeSync(): Boolean {
-        val hasNativeBridge = NSClassFromString(NATIVE_BRIDGE_CLASS_NAME) != null
-        if (!hasNativeBridge) return false
-
+    
+    private fun requestNativeBridgeSync() {
         NSNotificationCenter.defaultCenter.postNotificationName(
             aName = NATIVE_SYNC_NOTIFICATION_NAME,
             `object` = null,
         )
-        return true
-    }
-
-    @OptIn(BetaInteropApi::class)
-    private fun isAlarmKitSupportedAtRuntime(): Boolean {
-        val hasKnownRuntimeClass =
-            NSClassFromString("AlarmKit.AlarmManager") != null ||
-                NSClassFromString("AKAlarmManager") != null
-        return hasKnownRuntimeClass
     }
 
     private suspend fun ensureNotificationPermission(): Boolean {
@@ -383,17 +349,11 @@ class PlatformIntervalAlarmScheduler(
         val dayOffset: Int,
     )
 
-    private enum class AlarmKitSyncResult {
-        Synced,
-        NotAvailable,
-    }
-
     private companion object {
         const val MAX_PENDING_NOTIFICATIONS = 64
         const val MAX_QUEUE_DAYS = 7
         const val MINUTES_PER_HOUR = 60
         const val REQUEST_PREFIX = "wakeapp_interval"
         const val NATIVE_SYNC_NOTIFICATION_NAME = "wakeapp.alarm.sync.requested"
-        const val NATIVE_BRIDGE_CLASS_NAME = "WakeAppAlarmEngineBridge"
     }
 }
