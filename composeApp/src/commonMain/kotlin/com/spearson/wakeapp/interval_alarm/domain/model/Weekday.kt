@@ -15,6 +15,8 @@ enum class Weekday(
     Sunday("Sun");
 
     companion object {
+        fun allDays(): Set<Weekday> = entries.toSet()
+
         fun weekdays(): Set<Weekday> = setOf(
             Monday,
             Tuesday,

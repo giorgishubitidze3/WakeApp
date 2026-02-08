@@ -8,7 +8,7 @@ data class IntervalAlarmPlan(
     val startTime: TimeOfDay = TimeOfDay(hour = 7, minute = 0),
     val endTime: TimeOfDay = TimeOfDay(hour = 7, minute = 30),
     val intervalMinutes: Int = 5,
-    val activeDays: Set<Weekday> = Weekday.weekdays(),
+    val activeDays: Set<Weekday> = Weekday.allDays(),
     val snoozeMinutes: Int = 5,
     val isEnabled: Boolean = true,
 ) {

@@ -11,7 +11,7 @@ data class IntervalAlarmState(
     val intervalInput: String = "5",
     val randomizeInterval: Boolean = false,
     val isEnabled: Boolean = true,
-    val activeDays: Set<Weekday> = Weekday.weekdays(),
+    val activeDays: Set<Weekday> = Weekday.allDays(),
     val focusedWindow: FocusedWindow = FocusedWindow.Start,
     val alarmsPerActiveDay: Int = 0,
     val totalAlarmsPerWeek: Int = 0,

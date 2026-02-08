@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_HOUR
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_MINUTE
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_PLAN_ID
@@ -35,6 +36,7 @@ class PlatformIntervalAlarmScheduler : IntervalAlarmScheduler, KoinComponent {
         occurrences: List<AlarmOccurrence>,
     ): Result<Unit> {
         return runCatching {
+            Log.d(TAG, "Scheduling plan=${plan.id}, enabled=${plan.isEnabled}, occurrences=${occurrences.size}")
             cancelPlan(plan.id).getOrThrow()
             if (!plan.isEnabled) return@runCatching
 
@@ -60,12 +62,22 @@ class PlatformIntervalAlarmScheduler : IntervalAlarmScheduler, KoinComponent {
                     triggerAtMillis = triggerAtMillis,
                     pendingIntent = pendingIntent,
                 )
+                Log.d(
+                    TAG,
+                    "Scheduled requestCode=$requestCode plan=${plan.id} weekday=${occurrence.weekday} " +
+                        "time=${occurrence.time.hour}:${occurrence.time.minute.toString().padStart(2, '0')} " +
+                        "triggerAt=$triggerAtMillis",
+                )
                 requestCodes.add(requestCode.toString())
             }
 
             schedulerPreferences.edit()
                 .putStringSet(requestCodesKey(plan.id), requestCodes)
                 .apply()
+            Log.d(TAG, "Finished scheduling plan=${plan.id} codes=${requestCodes.size}")
+            Unit
+        }.onFailure { throwable ->
+            Log.e(TAG, "Failed scheduling plan=${plan.id}", throwable)
         }
     }
 
@@ -86,12 +98,17 @@ class PlatformIntervalAlarmScheduler : IntervalAlarmScheduler, KoinComponent {
                 if (pendingIntent != null) {
                     alarmManager.cancel(pendingIntent)
                     pendingIntent.cancel()
+                    Log.d(TAG, "Canceled alarm requestCode=$requestCode for plan=$planId")
                 }
             }
 
             schedulerPreferences.edit()
                 .remove(requestCodesKey(planId))
                 .apply()
+            Log.d(TAG, "Finished canceling plan=$planId count=${requestCodes.size}")
+            Unit
+        }.onFailure { throwable ->
+            Log.e(TAG, "Failed canceling plan=$planId", throwable)
         }
     }
 
@@ -179,7 +196,13 @@ class PlatformIntervalAlarmScheduler : IntervalAlarmScheduler, KoinComponent {
         pendingIntent: PendingIntent,
     ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-            throw SecurityException("Exact alarm permission not granted.")
+            Log.w(TAG, "Exact alarm permission missing. Falling back to inexact alarm scheduling.")
+            alarmManager.setAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                triggerAtMillis,
+                pendingIntent,
+            )
+            return
         }
 
         alarmManager.setExactAndAllowWhileIdle(
@@ -191,5 +214,6 @@ class PlatformIntervalAlarmScheduler : IntervalAlarmScheduler, KoinComponent {
 
     private companion object {
         const val DAYS_IN_WEEK = 7
+        const val TAG = "WakeAppScheduler"
     }
 }

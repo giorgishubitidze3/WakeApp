@@ -231,9 +231,10 @@ class IntervalAlarmViewModel(
                         shouldCloseScreen = true,
                     )
                 } else {
+                    val errorMessage = syncResult.exceptionOrNull()?.message
                     it.copy(
                         isSaving = false,
-                        statusMessage = "Unable to save alarm.",
+                        statusMessage = errorMessage ?: "Unable to save alarm.",
                     )
                 }
             }

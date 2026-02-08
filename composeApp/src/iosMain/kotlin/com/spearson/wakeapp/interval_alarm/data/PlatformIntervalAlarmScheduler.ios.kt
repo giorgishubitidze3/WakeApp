@@ -23,6 +23,7 @@ import platform.Foundation.NSCalendarUnitMonth
 import platform.Foundation.NSCalendarUnitSecond
 import platform.Foundation.NSCalendarUnitWeekday
 import platform.Foundation.NSCalendarUnitYear
+import platform.Foundation.NSClassFromString
 import platform.Foundation.NSDate
 import platform.Foundation.NSDateComponents
 import platform.Foundation.NSLog
@@ -86,12 +87,17 @@ class PlatformIntervalAlarmScheduler(
     private suspend fun syncAllPlans(): Result<Unit> {
         return runCatching {
             syncMutex.withLock {
-                requestNativeBridgeSync()
+                if (requestNativeBridgeSync()) {
+                    NSLog("WakeApp: delegated scheduling to native iOS alarm engine bridge.")
+                    return@withLock
+                }
+                NSLog("WakeApp: native bridge unavailable. Using Kotlin notification fallback scheduler.")
 
                 val plans = intervalAlarmPlanRepository.getPlans().getOrElse { throw it }
                 val enabledPlans = plans.filter { it.isEnabled && it.activeDays.isNotEmpty() && it.intervalMinutes > 0 }
 
                 if (enabledPlans.isEmpty()) {
+                    NSLog("WakeApp: no enabled plans. Clearing pending WakeApp notifications.")
                     clearWakeRequests()
                     return@withLock
                 }
@@ -106,20 +112,33 @@ class PlatformIntervalAlarmScheduler(
                     now = now,
                 )
                 val queuedOccurrences = selectQueueWindow(candidateOccurrences)
+                NSLog(
+                    "WakeApp: fallback scheduling ${queuedOccurrences.size} notifications " +
+                        "from ${candidateOccurrences.size} candidates.",
+                )
 
                 clearWakeRequests()
                 queuedOccurrences.forEach { occurrence ->
                     scheduleNotification(occurrence)
                 }
             }
+        }.onFailure { throwable ->
+            NSLog("WakeApp: scheduler sync failed: ${throwable.message}")
         }
     }
     
-    private fun requestNativeBridgeSync() {
+    @OptIn(BetaInteropApi::class)
+    private fun requestNativeBridgeSync(): Boolean {
+        val hasNativeBridge =
+            NSClassFromString("WakeAppAlarmEngineBridge") != null ||
+                NSClassFromString("iosApp.WakeAppAlarmEngineBridge") != null
+        if (!hasNativeBridge) return false
+
         NSNotificationCenter.defaultCenter.postNotificationName(
             aName = NATIVE_SYNC_NOTIFICATION_NAME,
             `object` = null,
         )
+        return true
     }
 
     private suspend fun ensureNotificationPermission(): Boolean {
@@ -270,6 +289,10 @@ class PlatformIntervalAlarmScheduler(
     }
 
     private suspend fun scheduleNotification(occurrence: QueuedOccurrence) {
+        NSLog(
+            "WakeApp: queue notification plan=${occurrence.planId} dayOffset=${occurrence.dayOffset} " +
+                "time=${occurrence.time.toUiLabel()}",
+        )
         val content = UNMutableNotificationContent()
         content.setTitle("WakeApp Alarm")
         content.setBody("Interval alarm at ${occurrence.time.toUiLabel()}")

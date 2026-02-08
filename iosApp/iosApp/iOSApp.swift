@@ -30,6 +30,7 @@ public final class WakeAppAlarmEngineBridge: NSObject {
     @objc public func start() {
         guard !didStart else { return }
         didStart = true
+        NSLog("WakeApp: starting native iOS alarm engine bridge.")
 
         let center = NotificationCenter.default
 
@@ -39,6 +40,7 @@ public final class WakeAppAlarmEngineBridge: NSObject {
                 object: nil,
                 queue: nil
             ) { _ in
+                NSLog("WakeApp: received KMP alarm sync request.")
                 Task {
                     await WakeAppAlarmEngine.shared.syncFromStoredPlans()
                 }
@@ -51,6 +53,7 @@ public final class WakeAppAlarmEngineBridge: NSObject {
                 object: nil,
                 queue: nil
             ) { _ in
+                NSLog("WakeApp: app foregrounded, syncing alarm engine.")
                 Task {
                     await WakeAppAlarmEngine.shared.syncFromStoredPlans()
                 }
@@ -84,9 +87,11 @@ private actor WakeAppAlarmEngine {
         let activePlans = loadPlans().filter {
             $0.isEnabled && !$0.activeDays.isEmpty && $0.intervalMinutes > 0
         }
+        NSLog("WakeApp: native engine syncing \(activePlans.count) active plans.")
 
 #if canImport(AlarmKit)
         if #available(iOS 26.0, *), await syncWithAlarmKitIfPossible(plans: activePlans) {
+            NSLog("WakeApp: AlarmKit scheduling succeeded. Clearing fallback notifications.")
             await clearWakeNotifications()
             return
         }
@@ -96,6 +101,7 @@ private actor WakeAppAlarmEngine {
         }
 #endif
 
+        NSLog("WakeApp: using notification fallback scheduler.")
         await syncWithNotifications(plans: activePlans)
     }
 
@@ -127,6 +133,7 @@ private actor WakeAppAlarmEngine {
                 let alarmID = resolveAlarmKitID(key: item.key, idMap: &idMap)
                 try await scheduleAlarmKitAlarm(id: alarmID, item: item)
             }
+            NSLog("WakeApp: AlarmKit scheduled \(scheduleItems.count) recurring alarms.")
 
             saveAlarmKitIDMap(idMap)
             return true
@@ -246,6 +253,7 @@ private actor WakeAppAlarmEngine {
             now: now
         )
         let queued = selectQueueWindow(candidates)
+        NSLog("WakeApp: fallback queue picked \(queued.count) notifications from \(candidates.count) candidates.")
 
         await clearWakeNotifications()
 
@@ -398,11 +406,14 @@ private actor WakeAppAlarmEngine {
             let encoded = defaults.string(forKey: planStorageKey),
             let data = encoded.data(using: .utf8)
         else {
+            NSLog("WakeApp: no persisted plans found.")
             return []
         }
 
         do {
-            return try JSONDecoder().decode([StoredIntervalPlan].self, from: data)
+            let decoded = try JSONDecoder().decode([StoredIntervalPlan].self, from: data)
+            NSLog("WakeApp: loaded \(decoded.count) persisted plans.")
+            return decoded
         } catch {
             NSLog("WakeApp: failed to decode stored plans: \(error.localizedDescription)")
             return []

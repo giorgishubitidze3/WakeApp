@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -28,6 +29,7 @@ class AlarmTriggerReceiver : BroadcastReceiver() {
         val requestCode = intent.getIntExtra(EXTRA_REQUEST_CODE, 0)
         val hour = intent.getIntExtra(EXTRA_HOUR, 7)
         val minute = intent.getIntExtra(EXTRA_MINUTE, 0)
+        Log.d(TAG, "Alarm fired requestCode=$requestCode at ${formatTime(hour, minute)}")
 
         maybeShowNotification(
             context = context,
@@ -54,6 +56,7 @@ class AlarmTriggerReceiver : BroadcastReceiver() {
                 Manifest.permission.POST_NOTIFICATIONS,
             )
             if (permissionState != PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "POST_NOTIFICATIONS not granted. Alarm notification suppressed.")
                 return
             }
         }
@@ -95,6 +98,7 @@ class AlarmTriggerReceiver : BroadcastReceiver() {
             .build()
 
         NotificationManagerCompat.from(context).notify(requestCode, notification)
+        Log.d(TAG, "Alarm notification posted for requestCode=$requestCode")
     }
 
     private fun scheduleOneWeekLater(
@@ -114,6 +118,7 @@ class AlarmTriggerReceiver : BroadcastReceiver() {
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+            Log.w(TAG, "Exact alarm permission missing. Cannot reschedule exact weekly alarm.")
             return
         }
 
@@ -122,6 +127,7 @@ class AlarmTriggerReceiver : BroadcastReceiver() {
             System.currentTimeMillis() + ONE_WEEK_MILLIS,
             pendingIntent,
         )
+        Log.d(TAG, "Rescheduled weekly alarm requestCode=$requestCode")
     }
 
     private fun formatTime(hour24: Int, minute: Int): String {
@@ -143,5 +149,6 @@ class AlarmTriggerReceiver : BroadcastReceiver() {
 
     private companion object {
         const val ONE_WEEK_MILLIS = 7L * 24L * 60L * 60L * 1000L
+        const val TAG = "WakeAppAlarmTrigger"
     }
 }
