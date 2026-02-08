@@ -8,6 +8,10 @@ internal const val EXTRA_PLAN_ID = "extra_plan_id"
 internal const val EXTRA_REQUEST_CODE = "extra_request_code"
 internal const val EXTRA_HOUR = "extra_hour"
 internal const val EXTRA_MINUTE = "extra_minute"
+internal const val EXTRA_SNOOZE_MINUTES = "extra_snooze_minutes"
+internal const val EXTRA_IS_SNOOZE = "extra_is_snooze"
+
+internal const val DEFAULT_SNOOZE_MINUTES = 5
 
 internal const val SCHEDULER_PREFS = "wake_alarm_scheduler"
 internal const val PLAN_PREFS = "wake_alarm_plan_store"

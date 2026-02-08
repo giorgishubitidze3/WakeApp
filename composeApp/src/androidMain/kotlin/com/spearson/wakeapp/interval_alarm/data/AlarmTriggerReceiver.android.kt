@@ -1,27 +1,20 @@
 package com.spearson.wakeapp.interval_alarm.data
 
-import android.Manifest
 import android.app.AlarmManager
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
-import com.spearson.wakeapp.MainActivity
-import com.spearson.wakeapp.R
+import com.spearson.wakeapp.interval_alarm.data.android.DEFAULT_SNOOZE_MINUTES
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_HOUR
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_IS_SNOOZE
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_MINUTE
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_PLAN_ID
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_REQUEST_CODE
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_SNOOZE_MINUTES
 import com.spearson.wakeapp.interval_alarm.data.android.WAKE_ALARM_ACTION
-import com.spearson.wakeapp.interval_alarm.data.android.WAKE_ALARM_CHANNEL_ID
-import com.spearson.wakeapp.interval_alarm.data.android.WAKE_ALARM_CHANNEL_NAME
 
 class AlarmTriggerReceiver : BroadcastReceiver() {
 
@@ -29,76 +22,46 @@ class AlarmTriggerReceiver : BroadcastReceiver() {
         val requestCode = intent.getIntExtra(EXTRA_REQUEST_CODE, 0)
         val hour = intent.getIntExtra(EXTRA_HOUR, 7)
         val minute = intent.getIntExtra(EXTRA_MINUTE, 0)
+        val planId = intent.getStringExtra(EXTRA_PLAN_ID)
+        val snoozeMinutes = intent.getIntExtra(EXTRA_SNOOZE_MINUTES, DEFAULT_SNOOZE_MINUTES)
+        val isSnooze = intent.getBooleanExtra(EXTRA_IS_SNOOZE, false)
         Log.d(TAG, "Alarm fired requestCode=$requestCode at ${formatTime(hour, minute)}")
 
-        maybeShowNotification(
-            context = context,
-            requestCode = requestCode,
-            hour = hour,
-            minute = minute,
-        )
-        scheduleOneWeekLater(
-            context = context,
-            requestCode = requestCode,
-            originalIntent = intent,
-        )
-    }
-
-    private fun maybeShowNotification(
-        context: Context,
-        requestCode: Int,
-        hour: Int,
-        minute: Int,
-    ) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val permissionState = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS,
+        runCatching {
+            AlarmAlertService.startAlarm(
+                context = context,
+                planId = planId,
+                requestCode = requestCode,
+                hour = hour,
+                minute = minute,
+                snoozeMinutes = snoozeMinutes,
+                isSnooze = isSnooze,
             )
-            if (permissionState != PackageManager.PERMISSION_GRANTED) {
-                Log.w(TAG, "POST_NOTIFICATIONS not granted. Alarm notification suppressed.")
-                return
+        }.onFailure { throwable ->
+            Log.e(TAG, "Unable to start alarm foreground service for requestCode=$requestCode", throwable)
+            runCatching {
+                val fallbackIntent = AlarmRingingActivity.createIntent(
+                    context = context,
+                    requestCode = requestCode,
+                    hour = hour,
+                    minute = minute,
+                    snoozeMinutes = snoozeMinutes,
+                    planId = planId,
+                    isSnooze = isSnooze,
+                )
+                context.startActivity(fallbackIntent)
+            }.onFailure { fallbackError ->
+                Log.e(TAG, "Fallback alarm activity launch failed for requestCode=$requestCode", fallbackError)
             }
         }
 
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                WAKE_ALARM_CHANNEL_ID,
-                WAKE_ALARM_CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_HIGH,
-            ).apply {
-                description = "WakeApp interval alarms"
-                enableVibration(true)
-            }
-            notificationManager.createNotificationChannel(channel)
+        if (!isSnooze) {
+            scheduleOneWeekLater(
+                context = context,
+                requestCode = requestCode,
+                originalIntent = intent,
+            )
         }
-
-        val openAppIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val contentIntent = PendingIntent.getActivity(
-            context,
-            requestCode,
-            openAppIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or pendingIntentImmutableFlag(),
-        )
-        val title = "Wake up"
-        val content = "Interval alarm at ${formatTime(hour, minute)}"
-
-        val notification = NotificationCompat.Builder(context, WAKE_ALARM_CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher_round)
-            .setContentTitle(title)
-            .setContentText(content)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setAutoCancel(true)
-            .setContentIntent(contentIntent)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
-            .build()
-
-        NotificationManagerCompat.from(context).notify(requestCode, notification)
-        Log.d(TAG, "Alarm notification posted for requestCode=$requestCode")
     }
 
     private fun scheduleOneWeekLater(

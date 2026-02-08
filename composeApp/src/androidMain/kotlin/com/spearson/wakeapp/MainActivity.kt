@@ -2,6 +2,7 @@ package com.spearson.wakeapp
 
 import android.Manifest
 import android.app.AlarmManager
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -31,6 +32,7 @@ class MainActivity : ComponentActivity() {
 
     private fun requestAlarmCapabilitiesIfNeeded() {
         requestNotificationPermissionIfNeeded()
+        requestFullScreenIntentPermissionIfNeeded()
         requestExactAlarmPermissionIfNeeded()
     }
 
@@ -41,17 +43,30 @@ class MainActivity : ComponentActivity() {
             this,
             Manifest.permission.POST_NOTIFICATIONS,
         ) == PackageManager.PERMISSION_GRANTED
-        if (hasNotificationPermission) {
-            Log.d(TAG, "POST_NOTIFICATIONS already granted.")
-            return
-        }
+        if (hasNotificationPermission) return
 
-        Log.w(TAG, "Requesting POST_NOTIFICATIONS permission for alarm notifications.")
         ActivityCompat.requestPermissions(
             this,
             arrayOf(Manifest.permission.POST_NOTIFICATIONS),
             POST_NOTIFICATIONS_REQUEST_CODE,
         )
+    }
+
+    private fun requestFullScreenIntentPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        if (notificationManager.canUseFullScreenIntent()) return
+
+        runCatching {
+            startActivity(
+                Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
+                    data = Uri.parse("package:$packageName")
+                },
+            )
+        }.onFailure { throwable ->
+            Log.e(TAG, "Failed to open full-screen intent permission screen.", throwable)
+        }
     }
 
     private fun requestExactAlarmPermissionIfNeeded() {

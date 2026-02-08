@@ -7,9 +7,11 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_HOUR
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_IS_SNOOZE
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_MINUTE
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_PLAN_ID
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_REQUEST_CODE
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_SNOOZE_MINUTES
 import com.spearson.wakeapp.interval_alarm.data.android.SCHEDULER_PREFS
 import com.spearson.wakeapp.interval_alarm.data.android.WAKE_ALARM_ACTION
 import com.spearson.wakeapp.interval_alarm.domain.IntervalAlarmScheduler
@@ -51,6 +53,7 @@ class PlatformIntervalAlarmScheduler : IntervalAlarmScheduler, KoinComponent {
                     planId = plan.id,
                     requestCode = requestCode,
                     time = occurrence.time,
+                    snoozeMinutes = plan.snoozeMinutes,
                 )
                 val pendingIntent = PendingIntent.getBroadcast(
                     context,
@@ -128,12 +131,15 @@ class PlatformIntervalAlarmScheduler : IntervalAlarmScheduler, KoinComponent {
         planId: String,
         requestCode: Int,
         time: TimeOfDay,
+        snoozeMinutes: Int,
     ): Intent {
         return buildBaseAlarmIntent().apply {
             putExtra(EXTRA_PLAN_ID, planId)
             putExtra(EXTRA_REQUEST_CODE, requestCode)
             putExtra(EXTRA_HOUR, time.hour)
             putExtra(EXTRA_MINUTE, time.minute)
+            putExtra(EXTRA_SNOOZE_MINUTES, snoozeMinutes)
+            putExtra(EXTRA_IS_SNOOZE, false)
         }
     }
 

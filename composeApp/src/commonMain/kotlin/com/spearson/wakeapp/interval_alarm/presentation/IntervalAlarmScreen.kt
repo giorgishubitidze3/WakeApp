@@ -35,7 +35,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -50,8 +52,6 @@ import com.spearson.wakeapp.core.theme.WakeAppTheme
 import com.spearson.wakeapp.interval_alarm.domain.model.TimeOfDay
 import com.spearson.wakeapp.interval_alarm.domain.model.Weekday
 import kotlin.math.abs
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 @Composable
@@ -410,6 +410,7 @@ private fun WheelNumberColumn(
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val snapFlingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
     val itemHeightPx = with(LocalDensity.current) { WHEEL_ITEM_HEIGHT.roundToPx() }
+    var shouldEmitUserSelection by remember(valuesSize) { mutableStateOf(false) }
 
     LaunchedEffect(selectedValue, values) {
         if (listState.isScrollInProgress) return@LaunchedEffect
@@ -427,16 +428,18 @@ private fun WheelNumberColumn(
     }
 
     LaunchedEffect(listState, values) {
-        snapshotFlow {
-            val offsetStep = if (listState.firstVisibleItemScrollOffset >= itemHeightPx / 2) 1 else 0
-            listState.firstVisibleItemIndex + offsetStep
-        }
-            .map { centerIndex ->
-                values[centerIndex % valuesSize]
-            }
-            .distinctUntilChanged()
-            .collect { updatedValue ->
+        snapshotFlow { listState.isScrollInProgress }
+            .collect { isScrolling ->
+                if (isScrolling) {
+                    shouldEmitUserSelection = true
+                    return@collect
+                }
+                if (!shouldEmitUserSelection) return@collect
+                val offsetStep = if (listState.firstVisibleItemScrollOffset >= itemHeightPx / 2) 1 else 0
+                val centerIndex = listState.firstVisibleItemIndex + offsetStep
+                val updatedValue = values[centerIndex % valuesSize]
                 onValueSelectedState.value(updatedValue)
+                shouldEmitUserSelection = false
             }
     }
 

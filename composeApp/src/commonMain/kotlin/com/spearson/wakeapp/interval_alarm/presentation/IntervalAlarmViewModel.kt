@@ -20,9 +20,6 @@ class IntervalAlarmViewModel(
     private val intervalAlarmPlanRepository: IntervalAlarmPlanRepository,
     private val intervalAlarmScheduler: IntervalAlarmScheduler,
 ) : ViewModel() {
-    private var hasHandledScreenOpen = false
-    private var lastOpenedPlanId: String? = null
-
     private val _state = MutableStateFlow(IntervalAlarmState())
     val state = _state.stateIn(
         scope = viewModelScope,
@@ -54,10 +51,6 @@ class IntervalAlarmViewModel(
     }
 
     private fun handleScreenOpened(planId: String?) {
-        if (hasHandledScreenOpen && planId == lastOpenedPlanId) return
-        hasHandledScreenOpen = true
-        lastOpenedPlanId = planId
-
         if (planId == null) {
             _state.value = IntervalAlarmState()
             recalculatePreview()
