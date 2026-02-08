@@ -340,6 +340,9 @@ private actor WakeAppAlarmEngine {
             return
         }
 
+        await MainActor.run {
+            WakeAppNotificationDelegate.installNotificationCategories()
+        }
         guard await ensureNotificationPermission() else {
             NSLog("WakeApp: notification permission denied, skipping fallback scheduling.")
             return
@@ -384,7 +387,10 @@ private actor WakeAppAlarmEngine {
 
     private func requestNotificationAuthorization() async -> Bool {
         await withCheckedContinuation { continuation in
-            let options: UNAuthorizationOptions = [.alert, .badge, .sound]
+            var options: UNAuthorizationOptions = [.alert, .badge, .sound]
+            if #available(iOS 12.0, *) {
+                options.insert(.criticalAlert)
+            }
             notificationCenter.requestAuthorization(options: options) { granted, error in
                 if let error {
                     NSLog("WakeApp: notification authorization request error: \(error.localizedDescription)")
