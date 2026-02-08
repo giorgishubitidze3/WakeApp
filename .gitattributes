@@ -1,0 +1,3 @@
+# Ensure gradlew has LF line endings and is marked as executable
+gradlew text eol=lf
+*.bat text eol=crlf

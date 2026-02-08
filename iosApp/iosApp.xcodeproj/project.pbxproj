@@ -3,38 +3,25 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 56;
 	objects = {
+
+/* Begin PBXBuildFile section */
+		BB0000000000000000000001 /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1234567890ABCDEF123456 /* iOSApp.swift */; };
+		CC0000000000000000000001 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC1234567890ABCDEF123456 /* ContentView.swift */; };
+		EE0000000000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EE1234567890ABCDEF123456 /* Assets.xcassets */; };
+		FF0000000000000000000001 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FF1234567890ABCDEF123456 /* Preview Assets.xcassets */; };
+/* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		04D4B1961C4FC415ABDE7575 /* WakeApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WakeApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA1234567890ABCDEF123456 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
+		BB1234567890ABCDEF123456 /* iOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp.swift; sourceTree = "<group>"; };
+		CC1234567890ABCDEF123456 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		DD1234567890ABCDEF123456 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		EE1234567890ABCDEF123456 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		FF1234567890ABCDEF123456 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		B57CC10FDCDA2FCF1597F820 /* Exceptions for "iosApp" folder in "iosApp" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 06C7547B7EB2712EF7BD6530 /* iosApp */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		215D2D25B0A1F1C7A0F37FF0 /* iosApp */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				B57CC10FDCDA2FCF1597F820 /* Exceptions for "iosApp" folder in "iosApp" target */,
-			);
-			path = iosApp;
-			sourceTree = "<group>";
-		};
-		987747F09A37F59E92DF6C12 /* Configuration */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Configuration;
-			sourceTree = "<group>";
-		};
-/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		C46B9EFD33F380AC214D88B3 /* Frameworks */ = {
@@ -50,8 +37,8 @@
 		1E6AB356914E38A72E720F69 = {
 			isa = PBXGroup;
 			children = (
-				987747F09A37F59E92DF6C12 /* Configuration */,
-				215D2D25B0A1F1C7A0F37FF0 /* iosApp */,
+				AA0000000000000000000002 /* Configuration */,
+				AA0000000000000000000001 /* iosApp */,
 				C5AD98014072A752567D5ADE /* Products */,
 			);
 			sourceTree = "<group>";
@@ -62,6 +49,34 @@
 				04D4B1961C4FC415ABDE7575 /* WakeApp.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000002 /* Configuration */ = {
+			isa = PBXGroup;
+			children = (
+				AA1234567890ABCDEF123456 /* Config.xcconfig */,
+			);
+			path = Configuration;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000001 /* iosApp */ = {
+			isa = PBXGroup;
+			children = (
+				BB1234567890ABCDEF123456 /* iOSApp.swift */,
+				CC1234567890ABCDEF123456 /* ContentView.swift */,
+				DD1234567890ABCDEF123456 /* Info.plist */,
+				EE1234567890ABCDEF123456 /* Assets.xcassets */,
+				AA0000000000000000000003 /* Preview Content */,
+			);
+			path = iosApp;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000003 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				FF1234567890ABCDEF123456 /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -80,9 +95,6 @@
 			);
 			dependencies = (
 			);
-			fileSystemSynchronizedGroups = (
-				215D2D25B0A1F1C7A0F37FF0 /* iosApp */,
-			);
 			name = iosApp;
 			packageProductDependencies = (
 			);
@@ -97,15 +109,16 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1620;
-				LastUpgradeCheck = 1620;
+				LastSwiftUpdateCheck = 1520;
+				LastUpgradeCheck = 1520;
 				TargetAttributes = {
 					06C7547B7EB2712EF7BD6530 = {
-						CreatedOnToolsVersion = 16.2;
+						CreatedOnToolsVersion = 15.2;
 					};
 				};
 			};
 			buildConfigurationList = 0AFEF41B02C58CC3E34696DD /* Build configuration list for PBXProject "iosApp" */;
+			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -113,8 +126,6 @@
 				Base,
 			);
 			mainGroup = 1E6AB356914E38A72E720F69;
-			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
 			productRefGroup = C5AD98014072A752567D5ADE /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -129,6 +140,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EE0000000000000000000001 /* Assets.xcassets in Resources */,
+				FF0000000000000000000001 /* Preview Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -161,6 +174,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BB0000000000000000000001 /* iOSApp.swift in Sources */,
+				CC0000000000000000000001 /* ContentView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -169,8 +184,7 @@
 /* Begin XCBuildConfiguration section */
 		881C6D5926CCF4C46BD2CC6C /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReferenceAnchor = 987747F09A37F59E92DF6C12 /* Configuration */;
-			baseConfigurationReferenceRelativePath = Config.xcconfig;
+			baseConfigurationReference = AA1234567890ABCDEF123456 /* Config.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -221,7 +235,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -234,8 +248,7 @@
 		};
 		1ED7C7E8218A6B4E7167E8E7 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReferenceAnchor = 987747F09A37F59E92DF6C12 /* Configuration */;
-			baseConfigurationReferenceRelativePath = Config.xcconfig;
+			baseConfigurationReference = AA1234567890ABCDEF123456 /* Config.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -280,7 +293,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -293,7 +306,6 @@
 		6038DF17AF0E967FB224FE1E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "Apple Development";
@@ -321,7 +333,6 @@
 		234B4551D2A85B04A0A07869 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "Apple Development";
