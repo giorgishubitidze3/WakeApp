@@ -94,8 +94,8 @@ class AlarmHomeViewModel(
         }
 
         viewModelScope.launch {
-            val cancelResult = intervalAlarmScheduler.cancelPlan(planId)
             val deleteResult = intervalAlarmPlanRepository.deletePlan(planId)
+            val cancelResult = intervalAlarmScheduler.cancelPlan(planId)
             if (cancelResult.isFailure || deleteResult.isFailure) {
                 _state.update {
                     it.copy(statusMessage = "Unable to delete alarm.")
