@@ -55,18 +55,18 @@ final class WakeAppNotificationDelegate: NSObject, UIApplicationDelegate, UNUser
         let snoozeAction = UNNotificationAction(
             identifier: snoozeActionIdentifier,
             title: "Snooze",
-            options: []
+            options: [.foreground]
         )
         let stopAction = UNNotificationAction(
             identifier: stopActionIdentifier,
             title: "Stop",
-            options: [.destructive]
+            options: [.destructive, .foreground]
         )
         return UNNotificationCategory(
             identifier: alarmCategoryIdentifier,
             actions: [snoozeAction, stopAction],
             intentIdentifiers: [],
-            options: [.customDismissAction, .hiddenPreviewsShowTitle, .hiddenPreviewsShowSubtitle]
+            options: [.customDismissAction]
         )
     }
 }
@@ -424,7 +424,7 @@ private actor WakeAppAlarmEngine {
     ) async {
         let content = UNMutableNotificationContent()
         content.title = "WakeApp Alarm"
-        content.body = "Interval alarm at \(occurrence.time.uiLabel)"
+        content.body = "Interval alarm at \(occurrence.time.uiLabel). Hold to Snooze or Stop."
         content.sound = fallbackNotificationSound(settings: settings)
         content.categoryIdentifier = WakeAppNotificationDelegate.alarmCategoryIdentifier
         content.userInfo = [
