@@ -55,12 +55,12 @@ final class WakeAppNotificationDelegate: NSObject, UIApplicationDelegate, UNUser
         let snoozeAction = UNNotificationAction(
             identifier: snoozeActionIdentifier,
             title: "Snooze",
-            options: [.foreground]
+            options: []
         )
         let stopAction = UNNotificationAction(
             identifier: stopActionIdentifier,
             title: "Stop",
-            options: [.destructive, .foreground]
+            options: [.destructive]
         )
         return UNNotificationCategory(
             identifier: alarmCategoryIdentifier,
@@ -340,10 +340,13 @@ private actor WakeAppAlarmEngine {
             return
         }
 
+        WakeAppNotificationDelegate.installNotificationCategories()
         guard await ensureNotificationPermission() else {
             NSLog("WakeApp: notification permission denied, skipping fallback scheduling.")
             return
         }
+        let settings = await currentNotificationSettings()
+        logNotificationSettings(settings)
 
         let now = Date()
         let candidates = buildNotificationCandidates(
@@ -356,7 +359,7 @@ private actor WakeAppAlarmEngine {
         await clearWakeNotifications()
 
         for occurrence in queued {
-            await enqueueNotification(occurrence)
+            await enqueueNotification(occurrence, settings: settings)
         }
     }
 
@@ -382,7 +385,14 @@ private actor WakeAppAlarmEngine {
 
     private func requestNotificationAuthorization() async -> Bool {
         await withCheckedContinuation { continuation in
-            notificationCenter.requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
+            var options: UNAuthorizationOptions = [.alert, .badge, .sound]
+            if #available(iOS 15.0, *) {
+                options.insert(.timeSensitive)
+            }
+            notificationCenter.requestAuthorization(options: options) { granted, error in
+                if let error {
+                    NSLog("WakeApp: notification authorization request error: \(error.localizedDescription)")
+                }
                 continuation.resume(returning: granted)
             }
         }
@@ -404,11 +414,14 @@ private actor WakeAppAlarmEngine {
         }
     }
 
-    private func enqueueNotification(_ occurrence: QueuedNotificationOccurrence) async {
+    private func enqueueNotification(
+        _ occurrence: QueuedNotificationOccurrence,
+        settings: UNNotificationSettings
+    ) async {
         let content = UNMutableNotificationContent()
         content.title = "WakeApp Alarm"
         content.body = "Interval alarm at \(occurrence.time.uiLabel)"
-        content.sound = .default
+        content.sound = fallbackNotificationSound(settings: settings)
         content.categoryIdentifier = WakeAppNotificationDelegate.alarmCategoryIdentifier
         content.userInfo = [
             UserInfoKeys.planID: occurrence.planID,
@@ -569,11 +582,12 @@ private actor WakeAppAlarmEngine {
         originalContent: UNNotificationContent,
         snoozeMinutes: Int
     ) async {
+        let settings = await currentNotificationSettings()
         let content = (originalContent.mutableCopy() as? UNMutableNotificationContent)
             ?? UNMutableNotificationContent()
         content.title = originalContent.title
         content.body = originalContent.body
-        content.sound = .default
+        content.sound = fallbackNotificationSound(settings: settings)
         content.categoryIdentifier = WakeAppNotificationDelegate.alarmCategoryIdentifier
         var updatedUserInfo = originalContent.userInfo
         updatedUserInfo[UserInfoKeys.snoozeMinutes] = snoozeMinutes
@@ -606,6 +620,36 @@ private actor WakeAppAlarmEngine {
                 continuation.resume(returning: ())
             }
         }
+    }
+
+    private func logNotificationSettings(_ settings: UNNotificationSettings) {
+        let authStatus = settings.authorizationStatus.rawValue
+        let soundStatus = settings.soundSetting.rawValue
+        let alertStatus = settings.alertSetting.rawValue
+        let lockScreenStatus = settings.lockScreenSetting.rawValue
+        let carPlayStatus = settings.carPlaySetting.rawValue
+        if #available(iOS 15.0, *) {
+            NSLog(
+                "WakeApp: notification settings auth=\(authStatus) sound=\(soundStatus) " +
+                    "alert=\(alertStatus) lockScreen=\(lockScreenStatus) carPlay=\(carPlayStatus) " +
+                    "timeSensitive=\(settings.timeSensitiveSetting.rawValue)"
+            )
+        } else {
+            NSLog(
+                "WakeApp: notification settings auth=\(authStatus) sound=\(soundStatus) " +
+                    "alert=\(alertStatus) lockScreen=\(lockScreenStatus) carPlay=\(carPlayStatus)"
+            )
+        }
+    }
+
+    private func fallbackNotificationSound(settings: UNNotificationSettings) -> UNNotificationSound {
+        if settings.soundSetting != .enabled {
+            NSLog("WakeApp: notification sound setting is disabled in iOS settings.")
+        }
+        if #available(iOS 12.0, *), settings.criticalAlertSetting == .enabled {
+            return .defaultCriticalSound(withAudioVolume: 1)
+        }
+        return .default
     }
 }
 
