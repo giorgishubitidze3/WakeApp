@@ -26,12 +26,14 @@ class AlarmRescheduleReceiver : BroadcastReceiver() {
                 val generateAlarmOccurrencesUseCase = koin.get<GenerateAlarmOccurrencesUseCase>()
 
                 runBlocking {
-                    val plan = repository.getPlan().getOrNull() ?: return@runBlocking
-                    if (plan.isEnabled) {
-                        val occurrences = generateAlarmOccurrencesUseCase(plan)
-                        scheduler.schedulePlan(plan, occurrences)
-                    } else {
-                        scheduler.cancelPlan(plan.id)
+                    val plans = repository.getPlans().getOrNull().orEmpty()
+                    plans.forEach { plan ->
+                        if (plan.isEnabled) {
+                            val occurrences = generateAlarmOccurrencesUseCase(plan)
+                            scheduler.schedulePlan(plan, occurrences)
+                        } else {
+                            scheduler.cancelPlan(plan.id)
+                        }
                     }
                 }
             }.also {

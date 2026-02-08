@@ -2,6 +2,7 @@ package com.spearson.wakeapp.interval_alarm.data
 
 import com.spearson.wakeapp.interval_alarm.domain.IntervalAlarmPlanRepository
 import com.spearson.wakeapp.interval_alarm.domain.model.IntervalAlarmPlan
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import platform.Foundation.NSUserDefaults
 
@@ -12,19 +13,33 @@ class PlatformIntervalAlarmPlanRepository : IntervalAlarmPlanRepository {
         ignoreUnknownKeys = true
     }
 
-    override suspend fun getPlan(planId: String): Result<IntervalAlarmPlan?> {
+    override suspend fun getPlans(): Result<List<IntervalAlarmPlan>> {
         return runCatching {
-            val encodedPlan = userDefaults.stringForKey(storageKey(planId)) ?: return@runCatching null
-            json.decodeFromString<IntervalAlarmPlan>(encodedPlan)
+            val encodedPlans = userDefaults.stringForKey(storageKey()) ?: return@runCatching emptyList()
+            json.decodeFromString(ListSerializer(IntervalAlarmPlan.serializer()), encodedPlans)
         }
     }
 
     override suspend fun upsertPlan(plan: IntervalAlarmPlan): Result<Unit> {
         return runCatching {
-            val encodedPlan = json.encodeToString(plan)
-            userDefaults.setObject(encodedPlan, forKey = storageKey(plan.id))
+            val existingPlans = getPlans().getOrElse { emptyList() }
+            val updatedPlans = buildList {
+                addAll(existingPlans.filterNot { it.id == plan.id })
+                add(plan)
+            }.sortedBy { it.startTime.toMinutesOfDay() }
+            val encodedPlans = json.encodeToString(ListSerializer(IntervalAlarmPlan.serializer()), updatedPlans)
+            userDefaults.setObject(encodedPlans, forKey = storageKey())
         }
     }
 
-    private fun storageKey(planId: String): String = "interval_plan_$planId"
+    override suspend fun deletePlan(planId: String): Result<Unit> {
+        return runCatching {
+            val existingPlans = getPlans().getOrElse { emptyList() }
+            val updatedPlans = existingPlans.filterNot { it.id == planId }
+            val encodedPlans = json.encodeToString(ListSerializer(IntervalAlarmPlan.serializer()), updatedPlans)
+            userDefaults.setObject(encodedPlans, forKey = storageKey())
+        }
+    }
+
+    private fun storageKey(): String = "interval_plans"
 }
