@@ -99,6 +99,11 @@ public final class WakeAppAlarmEngineBridge: NSObject {
         guard !didStart else { return }
         didStart = true
         NSLog("WakeApp: starting native iOS alarm engine bridge.")
+#if canImport(AlarmKit)
+        NSLog("WakeApp: build includes AlarmKit support.")
+#else
+        NSLog("WakeApp: build does not include AlarmKit support. Xcode SDK likely lacks AlarmKit.")
+#endif
 
         let center = NotificationCenter.default
 
@@ -178,15 +183,20 @@ private actor WakeAppAlarmEngine {
         NSLog("WakeApp: native engine syncing \(activePlans.count) active plans.")
 
 #if canImport(AlarmKit)
-        if #available(iOS 26.0, *), await syncWithAlarmKitIfPossible(plans: activePlans) {
-            NSLog("WakeApp: AlarmKit scheduling succeeded. Clearing fallback notifications.")
-            await clearWakeNotifications()
-            return
-        }
-
         if #available(iOS 26.0, *) {
-            await cancelAllAlarmKitAlarms()
+            if await syncWithAlarmKitIfPossible(plans: activePlans) {
+                NSLog("WakeApp: AlarmKit scheduling succeeded. Clearing fallback notifications.")
+                await clearWakeNotifications()
+                return
+            } else {
+                NSLog("WakeApp: AlarmKit path unavailable or failed, falling back to notifications.")
+                await cancelAllAlarmKitAlarms()
+            }
+        } else {
+            NSLog("WakeApp: iOS \(UIDevice.current.systemVersion) does not support AlarmKit (requires iOS 26+).")
         }
+#else
+        NSLog("WakeApp: AlarmKit not compiled in this app build; using notification fallback.")
 #endif
 
         NSLog("WakeApp: using notification fallback scheduler.")
@@ -196,10 +206,16 @@ private actor WakeAppAlarmEngine {
 #if canImport(AlarmKit)
     @available(iOS 26.0, *)
     private func syncWithAlarmKitIfPossible(plans: [StoredIntervalPlan]) async -> Bool {
-        guard isAlarmKitAvailableAtRuntime else { return false }
+        let usageDescription = Bundle.main.object(forInfoDictionaryKey: "NSAlarmKitUsageDescription") as? String
+        if usageDescription?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+            NSLog("WakeApp: NSAlarmKitUsageDescription is missing. AlarmKit authorization cannot be requested.")
+            return false
+        }
 
         do {
+            NSLog("WakeApp: requesting AlarmKit authorization.")
             try await AlarmManager.shared.requestAuthorization()
+            NSLog("WakeApp: AlarmKit authorization request completed.")
             if plans.isEmpty {
                 await cancelAllAlarmKitAlarms()
                 return true
@@ -226,7 +242,7 @@ private actor WakeAppAlarmEngine {
             saveAlarmKitIDMap(idMap)
             return true
         } catch {
-            NSLog("WakeApp: AlarmKit scheduling failed: \(error.localizedDescription)")
+            NSLog("WakeApp: AlarmKit scheduling failed: \(error.localizedDescription). error=\(String(describing: error))")
             return false
         }
     }
@@ -280,12 +296,6 @@ private actor WakeAppAlarmEngine {
 
         try await AlarmManager.shared.schedule(id: id, configuration: configuration)
     }
-
-    @available(iOS 26.0, *)
-    private var isAlarmKitAvailableAtRuntime: Bool {
-        NSClassFromString("AlarmKit.AlarmManager") != nil || NSClassFromString("AKAlarmManager") != nil
-    }
-
     @available(iOS 26.0, *)
     private func buildAlarmKitScheduleItems(plans: [StoredIntervalPlan]) -> [AlarmKitScheduleItem] {
         plans.flatMap { plan in

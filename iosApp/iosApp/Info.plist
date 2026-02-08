@@ -4,5 +4,7 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>WakeApp uses AlarmKit to ring reliable interval alarms at the times you configure.</string>
 </dict>
 </plist>
