@@ -8,6 +8,7 @@ import com.spearson.wakeapp.interval_alarm.domain.IntervalAlarmScheduler
 import com.spearson.wakeapp.interval_alarm.domain.model.IntervalAlarmPlan
 import com.spearson.wakeapp.interval_alarm.domain.model.TimeOfDay
 import com.spearson.wakeapp.interval_alarm.domain.model.Weekday
+import com.spearson.wakeapp.interval_alarm.presentation.util.currentLocalTimeOfDay
 import kotlin.random.Random
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -52,7 +53,7 @@ class IntervalAlarmViewModel(
 
     private fun handleScreenOpened(planId: String?) {
         if (planId == null) {
-            _state.value = IntervalAlarmState()
+            _state.value = newPlanInitialState()
             recalculatePreview()
             return
         }
@@ -282,6 +283,17 @@ class IntervalAlarmViewModel(
         return "plan_${Random.nextLong(100_000_000L, Long.MAX_VALUE)}"
     }
 
+    private fun newPlanInitialState(): IntervalAlarmState {
+        val startTime = currentLocalTimeOfDay()
+        val endMinutes = (startTime.toMinutesOfDay() + NEW_PLAN_DEFAULT_WINDOW_MINUTES)
+            .coerceAtMost(MINUTES_PER_DAY - 1)
+        val endTime = TimeOfDay.fromMinutesOfDay(endMinutes)
+        return IntervalAlarmState(
+            startTime = startTime,
+            endTime = endTime,
+        )
+    }
+
     private fun IntervalAlarmState.focusedTime(): TimeOfDay {
         return when (focusedWindow) {
             FocusedWindow.Start -> startTime
@@ -317,5 +329,7 @@ class IntervalAlarmViewModel(
         const val HOURS_PER_HALF_DAY = 12
         const val MINUTE_MIN = 0
         const val MINUTE_MAX = 59
+        const val NEW_PLAN_DEFAULT_WINDOW_MINUTES = 30
+        const val MINUTES_PER_DAY = 1_440
     }
 }
