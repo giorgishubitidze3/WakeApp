@@ -412,7 +412,7 @@ private actor WakeAppAlarmEngine {
         }
         NSLog(
             "WakeApp: enqueue request id=\(occurrence.requestID) " +
-                "category=\(content.categoryIdentifier) snooze=\(occurrence.snoozeMinutes)m",
+                "category=\(content.categoryIdentifier) snooze=\(occurrence.snoozeMinutes)m"
         )
 
         let dateComponents = calendar.dateComponents(
