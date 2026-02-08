@@ -118,7 +118,12 @@ class AlarmTriggerReceiver : BroadcastReceiver() {
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-            Log.w(TAG, "Exact alarm permission missing. Cannot reschedule exact weekly alarm.")
+            Log.w(TAG, "Exact alarm permission missing. Falling back to inexact weekly reschedule.")
+            alarmManager.setAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                System.currentTimeMillis() + ONE_WEEK_MILLIS,
+                pendingIntent,
+            )
             return
         }
 
