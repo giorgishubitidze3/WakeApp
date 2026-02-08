@@ -29,7 +29,11 @@ class AlarmHomeViewModel(
         when (action) {
             AlarmHomeAction.OnScreenShown -> loadPlans()
             AlarmHomeAction.OnCreateAlarmClick -> requestCreateAlarmNavigation()
-            AlarmHomeAction.OnCreateAlarmNavigationHandled -> markCreateAlarmNavigationHandled()
+            is AlarmHomeAction.OnPlanClick -> requestEditAlarmNavigation(action.planId)
+            is AlarmHomeAction.OnPlanLongPress -> requestDeletePlan(action.planId)
+            AlarmHomeAction.OnDeletePlanConfirm -> confirmDeletePlan()
+            AlarmHomeAction.OnDeletePlanDismiss -> dismissDeletePlan()
+            AlarmHomeAction.OnNavigationHandled -> markNavigationHandled()
             is AlarmHomeAction.OnPlanEnabledChanged -> updatePlanEnabledState(action.planId, action.isEnabled)
             AlarmHomeAction.OnDismissStatusMessage -> dismissStatusMessage()
         }
@@ -38,11 +42,18 @@ class AlarmHomeViewModel(
     private fun loadPlans() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
-            val plans = intervalAlarmPlanRepository.getPlans().getOrElse { emptyList() }
-            _state.update {
-                it.copy(
+            val plansResult = intervalAlarmPlanRepository.getPlans()
+            _state.update { current ->
+                current.copy(
                     isLoading = false,
-                    plans = plans.sortedBy { plan -> plan.startTime.toMinutesOfDay() },
+                    plans = plansResult.getOrElse { emptyList() }.sortedBy { plan ->
+                        plan.startTime.toMinutesOfDay()
+                    },
+                    statusMessage = if (plansResult.isFailure) {
+                        "Unable to load alarms."
+                    } else {
+                        current.statusMessage
+                    },
                 )
             }
         }
@@ -50,13 +61,53 @@ class AlarmHomeViewModel(
 
     private fun requestCreateAlarmNavigation() {
         _state.update {
-            it.copy(shouldNavigateToCreateAlarm = true)
+            it.copy(navigationEvent = AlarmHomeNavigationEvent.Create)
         }
     }
 
-    private fun markCreateAlarmNavigationHandled() {
+    private fun requestEditAlarmNavigation(planId: String) {
         _state.update {
-            it.copy(shouldNavigateToCreateAlarm = false)
+            it.copy(navigationEvent = AlarmHomeNavigationEvent.Edit(planId))
+        }
+    }
+
+    private fun requestDeletePlan(planId: String) {
+        _state.update {
+            it.copy(pendingDeletePlanId = planId)
+        }
+    }
+
+    private fun dismissDeletePlan() {
+        _state.update {
+            it.copy(pendingDeletePlanId = null)
+        }
+    }
+
+    private fun confirmDeletePlan() {
+        val planId = _state.value.pendingDeletePlanId ?: return
+
+        _state.update { current ->
+            current.copy(
+                pendingDeletePlanId = null,
+                plans = current.plans.filterNot { it.id == planId },
+            )
+        }
+
+        viewModelScope.launch {
+            val cancelResult = intervalAlarmScheduler.cancelPlan(planId)
+            val deleteResult = intervalAlarmPlanRepository.deletePlan(planId)
+            if (cancelResult.isFailure || deleteResult.isFailure) {
+                _state.update {
+                    it.copy(statusMessage = "Unable to delete alarm.")
+                }
+                loadPlans()
+            }
+        }
+    }
+
+    private fun markNavigationHandled() {
+        _state.update {
+            it.copy(navigationEvent = null)
         }
     }
 

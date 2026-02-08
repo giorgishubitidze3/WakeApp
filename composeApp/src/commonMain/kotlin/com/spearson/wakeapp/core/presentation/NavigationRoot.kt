@@ -21,6 +21,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import com.spearson.wakeapp.alarm_home.presentation.AlarmHomeRoot
 import com.spearson.wakeapp.interval_alarm.presentation.IntervalAlarmRoot
 import com.spearson.wakeapp.settings.presentation.SettingsScreen
@@ -71,13 +72,15 @@ fun NavigationRoot(
         ) {
             composable<Route.Alarms> {
                 AlarmHomeRoot(
-                    onCreateAlarm = {
-                        navController.navigate(Route.CreateAlarm)
+                    onOpenAlarmEditor = { planId ->
+                        navController.navigate(Route.CreateAlarm(planId = planId))
                     },
                 )
             }
-            composable<Route.CreateAlarm> {
+            composable<Route.CreateAlarm> { backStackEntry ->
+                val route = backStackEntry.toRoute<Route.CreateAlarm>()
                 IntervalAlarmRoot(
+                    planId = route.planId,
                     onClose = {
                         navController.navigateUp()
                     },
@@ -130,7 +133,7 @@ private fun NavDestination?.isDestinationSelected(route: Route): Boolean {
     if (this == null) return false
     return when (route) {
         Route.Alarms -> hierarchy.any { it.hasRoute<Route.Alarms>() }
-        Route.CreateAlarm -> hierarchy.any { it.hasRoute<Route.CreateAlarm>() }
+        is Route.CreateAlarm -> hierarchy.any { it.hasRoute<Route.CreateAlarm>() }
         Route.Stats -> hierarchy.any { it.hasRoute<Route.Stats>() }
         Route.Settings -> hierarchy.any { it.hasRoute<Route.Settings>() }
     }

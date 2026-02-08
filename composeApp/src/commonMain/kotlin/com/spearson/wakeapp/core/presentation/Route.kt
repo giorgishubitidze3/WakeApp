@@ -7,7 +7,9 @@ sealed interface Route {
     data object Alarms: Route
 
     @Serializable
-    data object CreateAlarm: Route
+    data class CreateAlarm(
+        val planId: String? = null,
+    ): Route
 
     @Serializable
     data object Stats: Route

@@ -1,6 +1,8 @@
 package com.spearson.wakeapp.alarm_home.presentation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,12 +13,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +38,8 @@ fun AlarmHomeScreen(
     onAction: (AlarmHomeAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val pendingDeletePlan = state.plans.firstOrNull { it.id == state.pendingDeletePlanId }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -73,6 +79,12 @@ fun AlarmHomeScreen(
                 ) { plan ->
                     AlarmPlanRow(
                         plan = plan,
+                        onClick = {
+                            onAction(AlarmHomeAction.OnPlanClick(plan.id))
+                        },
+                        onLongClick = {
+                            onAction(AlarmHomeAction.OnPlanLongPress(plan.id))
+                        },
                         onEnabledChanged = { isEnabled ->
                             onAction(
                                 AlarmHomeAction.OnPlanEnabledChanged(
@@ -95,16 +107,51 @@ fun AlarmHomeScreen(
             )
         }
     }
+
+    if (pendingDeletePlan != null) {
+        AlertDialog(
+            onDismissRequest = { onAction(AlarmHomeAction.OnDeletePlanDismiss) },
+            title = {
+                Text(
+                    text = "Delete alarm?",
+                    style = MaterialTheme.typography.titleLarge,
+                )
+            },
+            text = {
+                Text(
+                    text = "Remove ${pendingDeletePlan.startTime.toUiLabel()} interval alarm plan.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { onAction(AlarmHomeAction.OnDeletePlanDismiss) }) {
+                    Text("Cancel")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { onAction(AlarmHomeAction.OnDeletePlanConfirm) }) {
+                    Text("Delete")
+                }
+            },
+        )
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AlarmPlanRow(
     plan: IntervalAlarmPlan,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
     onEnabledChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
             .fillMaxWidth()
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),

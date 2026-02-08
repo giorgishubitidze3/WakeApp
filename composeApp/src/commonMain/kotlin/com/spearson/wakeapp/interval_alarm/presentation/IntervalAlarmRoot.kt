@@ -8,10 +8,15 @@ import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun IntervalAlarmRoot(
+    planId: String?,
     onClose: () -> Unit,
     viewModel: IntervalAlarmViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    LaunchedEffect(planId) {
+        viewModel.onAction(IntervalAlarmAction.OnScreenOpened(planId))
+    }
 
     LaunchedEffect(state.shouldCloseScreen) {
         if (state.shouldCloseScreen) {

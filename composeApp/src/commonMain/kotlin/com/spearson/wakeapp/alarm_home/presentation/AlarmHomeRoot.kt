@@ -12,7 +12,7 @@ import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun AlarmHomeRoot(
-    onCreateAlarm: () -> Unit,
+    onOpenAlarmEditor: (String?) -> Unit,
     viewModel: AlarmHomeViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -30,10 +30,19 @@ fun AlarmHomeRoot(
         }
     }
 
-    LaunchedEffect(state.shouldNavigateToCreateAlarm) {
-        if (state.shouldNavigateToCreateAlarm) {
-            onCreateAlarm()
-            viewModel.onAction(AlarmHomeAction.OnCreateAlarmNavigationHandled)
+    LaunchedEffect(state.navigationEvent) {
+        when (val navigationEvent = state.navigationEvent) {
+            AlarmHomeNavigationEvent.Create -> {
+                onOpenAlarmEditor(null)
+                viewModel.onAction(AlarmHomeAction.OnNavigationHandled)
+            }
+
+            is AlarmHomeNavigationEvent.Edit -> {
+                onOpenAlarmEditor(navigationEvent.planId)
+                viewModel.onAction(AlarmHomeAction.OnNavigationHandled)
+            }
+
+            null -> Unit
         }
     }
 
