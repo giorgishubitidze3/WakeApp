@@ -1,3 +1,35 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
 # Ensure gradlew has LF line endings and is marked as executable
 gradlew text eol=lf
 *.bat text eol=crlf
+
+# Xcode project files must use LF line endings
+*.pbxproj text eol=lf
+*.xcworkspacedata text eol=lf
+*.xcscheme text eol=lf
+*.xcconfig text eol=lf
+*.plist text eol=lf
+
+# Shell scripts must use LF
+*.sh text eol=lf
+
+# Source files
+*.kt text diff=kotlin
+*.java text diff=java
+*.swift text diff=swift
+
+# Gradle files
+*.gradle text diff=kotlin
+*.gradle.kts text diff=kotlin
+*.properties text
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.jar binary
+*.aar binary
