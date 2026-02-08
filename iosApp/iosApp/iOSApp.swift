@@ -404,6 +404,7 @@ private actor WakeAppAlarmEngine {
     private func loadPlans() -> [StoredIntervalPlan] {
         guard
             let encoded = defaults.string(forKey: planStorageKey),
+            !encoded.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             let data = encoded.data(using: .utf8)
         else {
             NSLog("WakeApp: no persisted plans found.")
@@ -415,7 +416,8 @@ private actor WakeAppAlarmEngine {
             NSLog("WakeApp: loaded \(decoded.count) persisted plans.")
             return decoded
         } catch {
-            NSLog("WakeApp: failed to decode stored plans: \(error.localizedDescription)")
+            let preview = String(encoded.prefix(220))
+            NSLog("WakeApp: failed to decode stored plans: \(error.localizedDescription). payload=\(preview)")
             return []
         }
     }
@@ -447,6 +449,29 @@ private struct StoredIntervalPlan: Decodable {
     let intervalMinutes: Int
     let activeDays: Set<StoredWeekday>
     let isEnabled: Bool
+    let snoozeMinutes: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case startTime
+        case endTime
+        case intervalMinutes
+        case activeDays
+        case isEnabled
+        case snoozeMinutes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        startTime = try container.decode(StoredTimeOfDay.self, forKey: .startTime)
+        endTime = try container.decode(StoredTimeOfDay.self, forKey: .endTime)
+        intervalMinutes = try container.decodeIfPresent(Int.self, forKey: .intervalMinutes) ?? 5
+        activeDays = try container.decodeIfPresent(Set<StoredWeekday>.self, forKey: .activeDays)
+            ?? Set(StoredWeekday.allCases)
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+        snoozeMinutes = try container.decodeIfPresent(Int.self, forKey: .snoozeMinutes) ?? 5
+    }
 }
 
 private struct StoredTimeOfDay: Codable, Hashable {
