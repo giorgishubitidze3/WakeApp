@@ -66,7 +66,7 @@ final class WakeAppNotificationDelegate: NSObject, UIApplicationDelegate, UNUser
             identifier: alarmCategoryIdentifier,
             actions: [snoozeAction, stopAction],
             intentIdentifiers: [],
-            options: [.customDismissAction]
+            options: [.customDismissAction, .hiddenPreviewsShowTitle, .hiddenPreviewsShowSubtitle]
         )
     }
 }
@@ -153,6 +153,7 @@ private actor WakeAppAlarmEngine {
     private let planStorageKey = "interval_plans"
     private let requestPrefix = "wakeapp_interval"
     private let alarmKitIDMapKey = "wakeapp.alarmkit.id.map"
+    private let fallbackSoundName = UNNotificationSoundName("wake_alarm.wav")
     private let maxPendingNotifications = 64
     private let maxQueueDays = 7
 
@@ -343,6 +344,7 @@ private actor WakeAppAlarmEngine {
         await MainActor.run {
             WakeAppNotificationDelegate.installNotificationCategories()
         }
+        await logRegisteredCategories()
         guard await ensureNotificationPermission() else {
             NSLog("WakeApp: notification permission denied, skipping fallback scheduling.")
             return
@@ -649,9 +651,23 @@ private actor WakeAppAlarmEngine {
             NSLog("WakeApp: notification sound setting is disabled in iOS settings.")
         }
         if #available(iOS 12.0, *), settings.criticalAlertSetting == .enabled {
-            return .defaultCriticalSound(withAudioVolume: 1)
+            NSLog("WakeApp: using critical custom alarm sound.")
+            return .criticalSoundNamed(fallbackSoundName, withAudioVolume: 1)
         }
-        return .default
+        NSLog("WakeApp: using custom alarm sound wake_alarm.wav.")
+        return .init(named: fallbackSoundName)
+    }
+
+    private func logRegisteredCategories() async {
+        _ = await withCheckedContinuation { continuation in
+            notificationCenter.getNotificationCategories { categories in
+                let identifiers = categories.map(\.identifier).sorted().joined(separator: ",")
+                NSLog(
+                    "WakeApp: registered notification categories count=\(categories.count) ids=[\(identifiers)]"
+                )
+                continuation.resume(returning: ())
+            }
+        }
     }
 }
 

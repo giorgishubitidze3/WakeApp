@@ -11,6 +11,7 @@
 		CC0000000000000000000001 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC1234567890ABCDEF123456 /* ContentView.swift */; };
 		EE0000000000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EE1234567890ABCDEF123456 /* Assets.xcassets */; };
 		FF0000000000000000000001 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FF1234567890ABCDEF123456 /* Preview Assets.xcassets */; };
+		AB0000000000000000000001 /* wake_alarm.wav in Resources */ = {isa = PBXBuildFile; fileRef = AB1234567890ABCDEF123456 /* wake_alarm.wav */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -21,6 +22,7 @@
 		DD1234567890ABCDEF123456 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		EE1234567890ABCDEF123456 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FF1234567890ABCDEF123456 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		AB1234567890ABCDEF123456 /* wake_alarm.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = wake_alarm.wav; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -65,6 +67,7 @@
 				BB1234567890ABCDEF123456 /* iOSApp.swift */,
 				CC1234567890ABCDEF123456 /* ContentView.swift */,
 				DD1234567890ABCDEF123456 /* Info.plist */,
+				AB1234567890ABCDEF123456 /* wake_alarm.wav */,
 				EE1234567890ABCDEF123456 /* Assets.xcassets */,
 				AA0000000000000000000003 /* Preview Content */,
 			);
@@ -140,6 +143,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AB0000000000000000000001 /* wake_alarm.wav in Resources */,
 				EE0000000000000000000001 /* Assets.xcassets in Resources */,
 				FF0000000000000000000001 /* Preview Assets.xcassets in Resources */,
 			);
