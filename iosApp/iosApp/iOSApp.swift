@@ -7,8 +7,43 @@ import UserNotifications
 import AlarmKit
 #endif
 
+final class WakeAppNotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil
+    ) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        NSLog("WakeApp: foreground notification will be presented id=\(notification.request.identifier)")
+        if #available(iOS 14.0, *) {
+            completionHandler([.banner, .list, .sound, .badge])
+        } else {
+            completionHandler([.alert, .sound, .badge])
+        }
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        NSLog("WakeApp: notification interaction received id=\(response.notification.request.identifier)")
+        completionHandler()
+    }
+}
+
 @main
 struct iOSApp: App {
+    @UIApplicationDelegateAdaptor(WakeAppNotificationDelegate.self)
+    private var notificationDelegate
+
     init() {
         WakeAppAlarmEngineBridge.shared.start()
     }
@@ -311,6 +346,9 @@ private actor WakeAppAlarmEngine {
         content.title = "WakeApp Alarm"
         content.body = "Interval alarm at \(occurrence.time.uiLabel)"
         content.sound = .default
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = .timeSensitive
+        }
 
         let dateComponents = calendar.dateComponents(
             [.year, .month, .day, .hour, .minute, .second],
