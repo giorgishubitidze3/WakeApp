@@ -48,6 +48,7 @@ kotlin {
             implementation(libs.material3.adaptive)
             implementation(libs.material3.adaptive.layout)
             implementation(libs.compose.ui.backhandler)
+            implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.coil.compose)
             implementation(libs.jetbrains.compose.navigation)
@@ -92,5 +93,4 @@ android {
 dependencies {
     debugImplementation(compose.uiTooling)
 }
-
 

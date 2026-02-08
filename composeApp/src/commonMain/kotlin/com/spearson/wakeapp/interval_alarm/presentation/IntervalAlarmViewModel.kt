@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.spearson.wakeapp.interval_alarm.domain.GenerateAlarmOccurrencesUseCase
 import com.spearson.wakeapp.interval_alarm.domain.IntervalAlarmPlanRepository
+import com.spearson.wakeapp.interval_alarm.domain.IntervalAlarmScheduler
 import com.spearson.wakeapp.interval_alarm.domain.model.IntervalAlarmPlan
 import com.spearson.wakeapp.interval_alarm.domain.model.Weekday
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
 class IntervalAlarmViewModel(
     private val generateAlarmOccurrencesUseCase: GenerateAlarmOccurrencesUseCase,
     private val intervalAlarmPlanRepository: IntervalAlarmPlanRepository,
+    private val intervalAlarmScheduler: IntervalAlarmScheduler,
 ) : ViewModel() {
 
     private var hasLoadedInitialData = false
@@ -126,14 +128,25 @@ class IntervalAlarmViewModel(
     private fun savePlan() {
         viewModelScope.launch {
             _state.update { it.copy(isSaving = true, statusMessage = null) }
-            val result = intervalAlarmPlanRepository.upsertPlan(_state.value.toPlan())
+            val plan = _state.value.toPlan()
+            val saveResult = intervalAlarmPlanRepository.upsertPlan(plan)
+            val syncResult = if (saveResult.isSuccess) {
+                if (plan.isEnabled) {
+                    val occurrences = generateAlarmOccurrencesUseCase(plan)
+                    intervalAlarmScheduler.schedulePlan(plan, occurrences)
+                } else {
+                    intervalAlarmScheduler.cancelPlan(plan.id)
+                }
+            } else {
+                Result.failure(saveResult.exceptionOrNull() ?: IllegalStateException("Plan save failed."))
+            }
             _state.update {
                 it.copy(
                     isSaving = false,
-                    statusMessage = if (result.isSuccess) {
+                    statusMessage = if (syncResult.isSuccess) {
                         "Plan saved."
                     } else {
-                        "Unable to save plan."
+                        "Unable to save and sync alarms."
                     },
                 )
             }

@@ -1,5 +1,8 @@
 package com.spearson.wakeapp.interval_alarm.domain.model
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 enum class Weekday(
     val shortLabel: String
 ) {
