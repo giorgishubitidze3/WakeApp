@@ -18,7 +18,7 @@ final class WakeAppNotificationDelegate: NSObject, UIApplicationDelegate, UNUser
     ) -> Bool {
         let center = UNUserNotificationCenter.current()
         center.delegate = self
-        center.setNotificationCategories([Self.alarmCategory])
+        Self.installNotificationCategories()
         return true
     }
 
@@ -47,16 +47,20 @@ final class WakeAppNotificationDelegate: NSObject, UIApplicationDelegate, UNUser
         }
     }
 
+    static func installNotificationCategories() {
+        UNUserNotificationCenter.current().setNotificationCategories([alarmCategory])
+    }
+
     private static var alarmCategory: UNNotificationCategory {
         let snoozeAction = UNNotificationAction(
             identifier: snoozeActionIdentifier,
             title: "Snooze",
-            options: []
+            options: [.foreground]
         )
         let stopAction = UNNotificationAction(
             identifier: stopActionIdentifier,
             title: "Stop",
-            options: [.destructive]
+            options: [.destructive, .foreground]
         )
         return UNNotificationCategory(
             identifier: alarmCategoryIdentifier,
@@ -73,6 +77,7 @@ struct iOSApp: App {
     private var notificationDelegate
 
     init() {
+        WakeAppNotificationDelegate.installNotificationCategories()
         WakeAppAlarmEngineBridge.shared.start()
     }
 
@@ -403,7 +408,12 @@ private actor WakeAppAlarmEngine {
         ]
         if #available(iOS 15.0, *) {
             content.interruptionLevel = .timeSensitive
+            content.relevanceScore = 1
         }
+        NSLog(
+            "WakeApp: enqueue request id=\(occurrence.requestID) " +
+                "category=\(content.categoryIdentifier) snooze=\(occurrence.snoozeMinutes)m",
+        )
 
         let dateComponents = calendar.dateComponents(
             [.year, .month, .day, .hour, .minute, .second],
@@ -560,6 +570,7 @@ private actor WakeAppAlarmEngine {
         content.userInfo = updatedUserInfo
         if #available(iOS 15.0, *) {
             content.interruptionLevel = .timeSensitive
+            content.relevanceScore = 1
         }
 
         let triggerDate = Date().addingTimeInterval(TimeInterval(snoozeMinutes * 60))
