@@ -91,36 +91,9 @@ class PlatformIntervalAlarmScheduler(
                     NSLog("WakeApp: delegated scheduling to native iOS alarm engine bridge.")
                     return@withLock
                 }
-                NSLog("WakeApp: native bridge unavailable. Using Kotlin notification fallback scheduler.")
-
-                val plans = intervalAlarmPlanRepository.getPlans().getOrElse { throw it }
-                val enabledPlans = plans.filter { it.isEnabled && it.activeDays.isNotEmpty() && it.intervalMinutes > 0 }
-
-                if (enabledPlans.isEmpty()) {
-                    NSLog("WakeApp: no enabled plans. Clearing pending WakeApp notifications.")
-                    clearWakeRequests()
-                    return@withLock
-                }
-
-                if (!ensureNotificationPermission()) {
-                    throw IllegalStateException("Notification permission is required to schedule iOS interval alarms.")
-                }
-
-                val now = NSDate()
-                val candidateOccurrences = buildUpcomingOccurrences(
-                    plans = enabledPlans,
-                    now = now,
+                throw IllegalStateException(
+                    "WakeAppAlarmEngineBridge unavailable. AlarmKit-only mode cannot schedule alarms.",
                 )
-                val queuedOccurrences = selectQueueWindow(candidateOccurrences)
-                NSLog(
-                    "WakeApp: fallback scheduling ${queuedOccurrences.size} notifications " +
-                        "from ${candidateOccurrences.size} candidates.",
-                )
-
-                clearWakeRequests()
-                queuedOccurrences.forEach { occurrence ->
-                    scheduleNotification(occurrence)
-                }
             }
         }.onFailure { throwable ->
             NSLog("WakeApp: scheduler sync failed: ${throwable.message}")

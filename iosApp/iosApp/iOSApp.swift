@@ -186,22 +186,21 @@ private actor WakeAppAlarmEngine {
 #if canImport(AlarmKit) && !targetEnvironment(simulator)
         if #available(iOS 26.0, *) {
             if await syncWithAlarmKitIfPossible(plans: activePlans) {
-                NSLog("WakeApp: AlarmKit scheduling succeeded. Clearing fallback notifications.")
+                NSLog("WakeApp: AlarmKit scheduling succeeded.")
                 await clearWakeNotifications()
-                return
             } else {
-                NSLog("WakeApp: AlarmKit path unavailable or failed, falling back to notifications.")
+                NSLog("WakeApp: AlarmKit scheduling failed. AlarmKit-only mode is enabled, no notification fallback.")
                 await cancelAllAlarmKitAlarms()
+                await clearWakeNotifications()
             }
         } else {
-            NSLog("WakeApp: iOS \(UIDevice.current.systemVersion) does not support AlarmKit (requires iOS 26+).")
+            NSLog("WakeApp: iOS \(UIDevice.current.systemVersion) does not support AlarmKit. Minimum required is iOS 26.")
+            await clearWakeNotifications()
         }
 #else
-        NSLog("WakeApp: AlarmKit not compiled in this app build; using notification fallback.")
+        NSLog("WakeApp: AlarmKit not compiled in this app build. AlarmKit-only mode cannot schedule alarms.")
+        await clearWakeNotifications()
 #endif
-
-        NSLog("WakeApp: using notification fallback scheduler.")
-        await syncWithNotifications(plans: activePlans)
     }
 
 #if canImport(AlarmKit) && !targetEnvironment(simulator)
