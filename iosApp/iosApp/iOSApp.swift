@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 import UserNotifications
 
-#if canImport(AlarmKit)
+#if canImport(AlarmKit) && !targetEnvironment(simulator)
 import AlarmKit
 #endif
 
@@ -99,7 +99,7 @@ public final class WakeAppAlarmEngineBridge: NSObject {
         guard !didStart else { return }
         didStart = true
         NSLog("WakeApp: starting native iOS alarm engine bridge.")
-#if canImport(AlarmKit)
+#if canImport(AlarmKit) && !targetEnvironment(simulator)
         NSLog("WakeApp: build includes AlarmKit support.")
 #else
         NSLog("WakeApp: build does not include AlarmKit support. Xcode SDK likely lacks AlarmKit.")
@@ -183,7 +183,7 @@ private actor WakeAppAlarmEngine {
         }
         NSLog("WakeApp: native engine syncing \(activePlans.count) active plans.")
 
-#if canImport(AlarmKit)
+#if canImport(AlarmKit) && !targetEnvironment(simulator)
         if #available(iOS 26.0, *) {
             if await syncWithAlarmKitIfPossible(plans: activePlans) {
                 NSLog("WakeApp: AlarmKit scheduling succeeded. Clearing fallback notifications.")
@@ -204,7 +204,7 @@ private actor WakeAppAlarmEngine {
         await syncWithNotifications(plans: activePlans)
     }
 
-#if canImport(AlarmKit)
+#if canImport(AlarmKit) && !targetEnvironment(simulator)
     @available(iOS 26.0, *)
     private func syncWithAlarmKitIfPossible(plans: [StoredIntervalPlan]) async -> Bool {
         let usageDescription = Bundle.main.object(forInfoDictionaryKey: "NSAlarmKitUsageDescription") as? String
@@ -773,7 +773,7 @@ private enum UserInfoKeys {
 
 private let defaultSnoozeMinutes = 5
 
-#if canImport(AlarmKit)
+#if canImport(AlarmKit) && !targetEnvironment(simulator)
 @available(iOS 26.0, *)
 private struct AlarmKitScheduleItem {
     let key: String
