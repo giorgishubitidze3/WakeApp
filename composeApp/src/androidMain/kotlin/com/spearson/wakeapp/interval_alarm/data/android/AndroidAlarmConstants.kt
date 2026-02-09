@@ -1,7 +1,8 @@
 package com.spearson.wakeapp.interval_alarm.data.android
 
 internal const val WAKE_ALARM_ACTION = "com.spearson.wakeapp.ALARM_TRIGGER"
-internal const val WAKE_ALARM_CHANNEL_ID = "wake_interval_alarm_channel"
+internal const val WAKE_ALARM_MAINTENANCE_ACTION = "com.spearson.wakeapp.ALARM_MAINTENANCE_SYNC"
+internal const val WAKE_ALARM_CHANNEL_ID = "wake_interval_alarm_channel_v3_headsup"
 internal const val WAKE_ALARM_CHANNEL_NAME = "WakeApp alarms"
 
 internal const val EXTRA_PLAN_ID = "extra_plan_id"

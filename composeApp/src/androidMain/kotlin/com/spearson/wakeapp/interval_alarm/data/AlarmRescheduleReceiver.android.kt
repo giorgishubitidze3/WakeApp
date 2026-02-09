@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.spearson.wakeapp.di.initKoinAndroid
+import com.spearson.wakeapp.interval_alarm.data.android.WAKE_ALARM_MAINTENANCE_ACTION
 import com.spearson.wakeapp.interval_alarm.domain.GenerateAlarmOccurrencesUseCase
 import com.spearson.wakeapp.interval_alarm.domain.IntervalAlarmPlanRepository
 import com.spearson.wakeapp.interval_alarm.domain.IntervalAlarmScheduler
@@ -53,6 +54,7 @@ class AlarmRescheduleReceiver : BroadcastReceiver() {
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_TIME_CHANGED,
             Intent.ACTION_TIMEZONE_CHANGED,
+            WAKE_ALARM_MAINTENANCE_ACTION,
         )
     }
 }

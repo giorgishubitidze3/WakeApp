@@ -14,12 +14,17 @@ import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_REQUEST_CODE
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_SNOOZE_MINUTES
 import com.spearson.wakeapp.interval_alarm.data.android.SCHEDULER_PREFS
 import com.spearson.wakeapp.interval_alarm.data.android.WAKE_ALARM_ACTION
+import com.spearson.wakeapp.interval_alarm.data.android.WAKE_ALARM_MAINTENANCE_ACTION
 import com.spearson.wakeapp.interval_alarm.domain.IntervalAlarmScheduler
 import com.spearson.wakeapp.interval_alarm.domain.model.AlarmOccurrence
 import com.spearson.wakeapp.interval_alarm.domain.model.IntervalAlarmPlan
 import com.spearson.wakeapp.interval_alarm.domain.model.TimeOfDay
 import com.spearson.wakeapp.interval_alarm.domain.model.Weekday
 import java.util.Calendar
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
@@ -32,90 +37,244 @@ class PlatformIntervalAlarmScheduler : IntervalAlarmScheduler, KoinComponent {
     private val schedulerPreferences by lazy {
         context.getSharedPreferences(SCHEDULER_PREFS, Context.MODE_PRIVATE)
     }
+    private val schedulerMutex = Mutex()
 
     override suspend fun schedulePlan(
         plan: IntervalAlarmPlan,
         occurrences: List<AlarmOccurrence>,
     ): Result<Unit> {
-        return runCatching {
-            Log.d(TAG, "Scheduling plan=${plan.id}, enabled=${plan.isEnabled}, occurrences=${occurrences.size}")
-            cancelPlan(plan.id).getOrThrow()
-            if (!plan.isEnabled) return@runCatching
-
-            val requestCodes = mutableSetOf<String>()
-            occurrences.forEach { occurrence ->
-                val requestCode = requestCodeFor(plan.id, occurrence)
-                val triggerAtMillis = nextTriggerAtMillis(
-                    weekday = occurrence.weekday,
-                    time = occurrence.time,
-                )
-                val alarmIntent = buildAlarmIntent(
-                    planId = plan.id,
-                    requestCode = requestCode,
-                    time = occurrence.time,
-                    snoozeMinutes = plan.snoozeMinutes,
-                )
-                val pendingIntent = PendingIntent.getBroadcast(
-                    context,
-                    requestCode,
-                    alarmIntent,
-                    pendingIntentMutableFlags(),
-                )
-                setExactAlarm(
-                    triggerAtMillis = triggerAtMillis,
-                    pendingIntent = pendingIntent,
-                )
-                Log.d(
-                    TAG,
-                    "Scheduled requestCode=$requestCode plan=${plan.id} weekday=${occurrence.weekday} " +
-                        "time=${occurrence.time.hour}:${occurrence.time.minute.toString().padStart(2, '0')} " +
-                        "triggerAt=$triggerAtMillis",
-                )
-                requestCodes.add(requestCode.toString())
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                schedulerMutex.withLock {
+                    schedulePlanLocked(plan, occurrences)
+                }
+            }.onFailure { throwable ->
+                Log.e(TAG, "Failed scheduling plan=${plan.id}", throwable)
             }
-
-            schedulerPreferences.edit()
-                .putStringSet(requestCodesKey(plan.id), requestCodes)
-                .apply()
-            Log.d(TAG, "Finished scheduling plan=${plan.id} codes=${requestCodes.size}")
-            Unit
-        }.onFailure { throwable ->
-            Log.e(TAG, "Failed scheduling plan=${plan.id}", throwable)
         }
     }
 
     override suspend fun cancelPlan(planId: String): Result<Unit> {
-        return runCatching {
-            val requestCodes = schedulerPreferences
-                .getStringSet(requestCodesKey(planId), emptySet())
-                .orEmpty()
-
-            requestCodes.forEach { requestCodeString ->
-                val requestCode = requestCodeString.toIntOrNull() ?: return@forEach
-                val pendingIntent = PendingIntent.getBroadcast(
-                    context,
-                    requestCode,
-                    buildBaseAlarmIntent(),
-                    PendingIntent.FLAG_NO_CREATE or pendingIntentImmutableFlags(),
-                )
-                if (pendingIntent != null) {
-                    alarmManager.cancel(pendingIntent)
-                    pendingIntent.cancel()
-                    Log.d(TAG, "Canceled alarm requestCode=$requestCode for plan=$planId")
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                schedulerMutex.withLock {
+                    cancelPlanLocked(planId)
                 }
+            }.onFailure { throwable ->
+                Log.e(TAG, "Failed canceling plan=$planId", throwable)
             }
-
-            schedulerPreferences.edit()
-                .remove(requestCodesKey(planId))
-                .apply()
-            Log.d(TAG, "Finished canceling plan=$planId count=${requestCodes.size}")
-            Unit
-        }.onFailure { throwable ->
-            Log.e(TAG, "Failed canceling plan=$planId", throwable)
         }
     }
 
-    private fun requestCodesKey(planId: String): String = "scheduled_codes_$planId"
+    private fun schedulePlanLocked(
+        plan: IntervalAlarmPlan,
+        occurrences: List<AlarmOccurrence>,
+    ) {
+        Log.d(TAG, "Scheduling plan=${plan.id}, enabled=${plan.isEnabled}, occurrences=${occurrences.size}")
+        cancelPlanLocked(plan.id)
+        if (!plan.isEnabled) {
+            Log.d(TAG, "Plan=${plan.id} disabled. Schedule skipped after cancel.")
+            cancelMaintenanceSyncIfIdleLocked()
+            return
+        }
+
+        val scheduledCandidates = selectCandidatesForRollingWindow(
+            planId = plan.id,
+            occurrences = occurrences,
+        )
+        val requestCodes = HashSet<String>(scheduledCandidates.size)
+        var scheduleErrors = 0
+        for (candidate in scheduledCandidates) {
+            val requestCode = requestCodeFor(plan.id, candidate.occurrence)
+            val alarmIntent = buildAlarmIntent(
+                planId = plan.id,
+                requestCode = requestCode,
+                time = candidate.occurrence.time,
+                snoozeMinutes = plan.snoozeMinutes,
+            )
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                requestCode,
+                alarmIntent,
+                pendingIntentMutableFlags(),
+            )
+            val scheduled = trySetExactAlarm(
+                triggerAtMillis = candidate.triggerAtMillis,
+                pendingIntent = pendingIntent,
+            )
+            if (!scheduled) {
+                scheduleErrors++
+                Log.w(
+                    TAG,
+                    "Unable to schedule alarm for plan=${plan.id} requestCode=$requestCode. " +
+                        "Stopping this sync to keep existing scheduled set consistent.",
+                )
+                break
+            }
+            requestCodes.add(requestCode.toString())
+        }
+
+        schedulerPreferences.edit()
+            .putStringSet(requestCodesKey(plan.id), requestCodes)
+            .apply()
+
+        if (requestCodes.isNotEmpty()) {
+            scheduleMaintenanceSyncLocked()
+        } else {
+            cancelMaintenanceSyncIfIdleLocked()
+        }
+
+        Log.d(
+            TAG,
+            "Finished scheduling plan=${plan.id} codes=${requestCodes.size} " +
+                "requested=${occurrences.size} queued=${scheduledCandidates.size} errors=$scheduleErrors",
+        )
+    }
+
+    private fun cancelPlanLocked(planId: String) {
+        val requestCodes = schedulerPreferences
+            .getStringSet(requestCodesKey(planId), emptySet())
+            .orEmpty()
+
+        var canceledCount = 0
+        requestCodes.forEach { requestCodeString ->
+            val requestCode = requestCodeString.toIntOrNull() ?: return@forEach
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                requestCode,
+                buildBaseAlarmIntent(),
+                PendingIntent.FLAG_NO_CREATE or pendingIntentImmutableFlags(),
+            )
+            if (pendingIntent != null) {
+                alarmManager.cancel(pendingIntent)
+                pendingIntent.cancel()
+                canceledCount++
+            }
+        }
+        if (requestCodes.isEmpty()) {
+            canceledCount += cancelLegacyOrphanAlarms(planId)
+        }
+
+        schedulerPreferences.edit()
+            .remove(requestCodesKey(planId))
+            .apply()
+        cancelMaintenanceSyncIfIdleLocked()
+        Log.d(
+            TAG,
+            "Finished canceling plan=$planId canceled=$canceledCount storedCodes=${requestCodes.size}",
+        )
+    }
+
+    private fun cancelLegacyOrphanAlarms(planId: String): Int {
+        var canceledCount = 0
+        for (weekdayOrdinal in 0 until DAYS_IN_WEEK) {
+            for (hour in 0 until HOURS_IN_DAY) {
+                for (minute in 0 until MINUTES_IN_HOUR) {
+                    val legacyRequestCode = "$planId:$weekdayOrdinal:$hour:$minute".hashCode()
+                    val pendingIntent = PendingIntent.getBroadcast(
+                        context,
+                        legacyRequestCode,
+                        buildBaseAlarmIntent(),
+                        PendingIntent.FLAG_NO_CREATE or pendingIntentImmutableFlags(),
+                    )
+                    if (pendingIntent != null) {
+                        alarmManager.cancel(pendingIntent)
+                        pendingIntent.cancel()
+                        canceledCount++
+                    }
+                }
+            }
+        }
+        if (canceledCount > 0) {
+            Log.d(TAG, "Canceled legacy orphan alarms for plan=$planId count=$canceledCount")
+        }
+        return canceledCount
+    }
+
+    private fun selectCandidatesForRollingWindow(
+        planId: String,
+        occurrences: List<AlarmOccurrence>,
+    ): List<ScheduledCandidate> {
+        if (occurrences.isEmpty()) return emptyList()
+
+        val budget = availableAlarmSlotsForPlan(planId).coerceAtMost(MAX_SCHEDULED_PER_PLAN)
+        if (budget <= 0) {
+            Log.w(TAG, "No alarm slots available for plan=$planId. Will retry on next maintenance sync.")
+            return emptyList()
+        }
+
+        val candidates = occurrences
+            .asSequence()
+            .map { occurrence ->
+                ScheduledCandidate(
+                    occurrence = occurrence,
+                    triggerAtMillis = nextTriggerAtMillis(
+                        weekday = occurrence.weekday,
+                        time = occurrence.time,
+                    ),
+                )
+            }
+            .sortedBy(ScheduledCandidate::triggerAtMillis)
+            .toList()
+
+        if (candidates.size <= budget) return candidates
+
+        Log.w(
+            TAG,
+            "Rolling window active for plan=$planId. budget=$budget total=${candidates.size}.",
+        )
+        return candidates.take(budget)
+    }
+
+    private fun availableAlarmSlotsForPlan(planId: String): Int {
+        val usedByOtherPlans = schedulerPreferences.all.entries.sumOf { entry ->
+            if (!entry.key.startsWith(REQUEST_CODES_KEY_PREFIX) || entry.key == requestCodesKey(planId)) {
+                return@sumOf 0
+            }
+            (entry.value as? Set<*>)?.size ?: 0
+        }
+        return (MAX_TOTAL_SCHEDULED_ALARMS - RESERVED_INTERNAL_ALARMS - usedByOtherPlans)
+            .coerceAtLeast(0)
+    }
+
+    private fun cancelMaintenanceSyncIfIdleLocked() {
+        val hasTrackedPlanAlarms = schedulerPreferences.all.entries.any { entry ->
+            entry.key.startsWith(REQUEST_CODES_KEY_PREFIX) &&
+                ((entry.value as? Set<*>)?.isNotEmpty() == true)
+        }
+        if (hasTrackedPlanAlarms) return
+
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            MAINTENANCE_SYNC_REQUEST_CODE,
+            buildMaintenanceIntent(),
+            PendingIntent.FLAG_NO_CREATE or pendingIntentImmutableFlags(),
+        ) ?: return
+        alarmManager.cancel(pendingIntent)
+        pendingIntent.cancel()
+        Log.d(TAG, "Canceled maintenance sync alarm because no tracked plan alarms remain.")
+    }
+
+    private fun scheduleMaintenanceSyncLocked() {
+        val maintenancePendingIntent = PendingIntent.getBroadcast(
+            context,
+            MAINTENANCE_SYNC_REQUEST_CODE,
+            buildMaintenanceIntent(),
+            pendingIntentMutableFlags(),
+        )
+        val triggerAtMillis = System.currentTimeMillis() + MAINTENANCE_SYNC_INTERVAL_MILLIS
+        val scheduled = trySetExactAlarm(
+            triggerAtMillis = triggerAtMillis,
+            pendingIntent = maintenancePendingIntent,
+        )
+        if (scheduled) {
+            Log.d(TAG, "Scheduled maintenance sync at=$triggerAtMillis")
+        } else {
+            Log.w(TAG, "Skipped maintenance sync scheduling due to alarm cap/availability limits.")
+        }
+    }
+
+    private fun requestCodesKey(planId: String): String = "$REQUEST_CODES_KEY_PREFIX$planId"
 
     private fun requestCodeFor(planId: String, occurrence: AlarmOccurrence): Int {
         return "$planId:${occurrence.weekday.ordinal}:${occurrence.time.hour}:${occurrence.time.minute}".hashCode()
@@ -124,6 +283,12 @@ class PlatformIntervalAlarmScheduler : IntervalAlarmScheduler, KoinComponent {
     private fun buildBaseAlarmIntent(): Intent {
         return Intent(context, AlarmTriggerReceiver::class.java).apply {
             action = WAKE_ALARM_ACTION
+        }
+    }
+
+    private fun buildMaintenanceIntent(): Intent {
+        return Intent(context, AlarmRescheduleReceiver::class.java).apply {
+            action = WAKE_ALARM_MAINTENANCE_ACTION
         }
     }
 
@@ -197,29 +362,58 @@ class PlatformIntervalAlarmScheduler : IntervalAlarmScheduler, KoinComponent {
         return PendingIntent.FLAG_UPDATE_CURRENT or pendingIntentImmutableFlags()
     }
 
-    private fun setExactAlarm(
+    private fun trySetExactAlarm(
         triggerAtMillis: Long,
         pendingIntent: PendingIntent,
-    ) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-            Log.w(TAG, "Exact alarm permission missing. Falling back to inexact alarm scheduling.")
-            alarmManager.setAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                triggerAtMillis,
-                pendingIntent,
-            )
-            return
+    ): Boolean {
+        val result = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+                Log.w(TAG, "Exact alarm permission missing. Falling back to inexact alarm scheduling.")
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent,
+                )
+            } else {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent,
+                )
+            }
         }
 
-        alarmManager.setExactAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP,
-            triggerAtMillis,
-            pendingIntent,
-        )
+        result.exceptionOrNull()?.let { throwable ->
+            if (throwable.isAlarmLimitException()) {
+                Log.w(TAG, "Alarm registration skipped: concurrent alarm cap reached.")
+            } else {
+                Log.e(TAG, "Failed registering alarm at=$triggerAtMillis", throwable)
+            }
+        }
+        return result.isSuccess
+    }
+
+    private fun Throwable.isAlarmLimitException(): Boolean {
+        if (this !is IllegalStateException) return false
+        val message = message ?: return false
+        return message.contains("Maximum limit of concurrent alarms", ignoreCase = true)
     }
 
     private companion object {
         const val DAYS_IN_WEEK = 7
+        const val REQUEST_CODES_KEY_PREFIX = "scheduled_codes_"
+        const val MAX_TOTAL_SCHEDULED_ALARMS = 450
+        const val RESERVED_INTERNAL_ALARMS = 8
+        const val MAX_SCHEDULED_PER_PLAN = 450
+        const val MAINTENANCE_SYNC_REQUEST_CODE = 0x57A90
+        const val MAINTENANCE_SYNC_INTERVAL_MILLIS = 4L * 60L * 60L * 1000L
+        const val HOURS_IN_DAY = 24
+        const val MINUTES_IN_HOUR = 60
         const val TAG = "WakeAppScheduler"
     }
+
+    private data class ScheduledCandidate(
+        val occurrence: AlarmOccurrence,
+        val triggerAtMillis: Long,
+    )
 }

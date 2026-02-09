@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -43,11 +44,16 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.spearson.wakeapp.core.theme.WakeAppTheme
 import com.spearson.wakeapp.interval_alarm.domain.model.TimeOfDay
 import com.spearson.wakeapp.interval_alarm.domain.model.Weekday
@@ -68,7 +74,7 @@ fun IntervalAlarmScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(IntervalEditorBackground),
     ) {
         Header(
             onCancelClick = { onAction(IntervalAlarmAction.OnCancelClick) },
@@ -151,17 +157,55 @@ fun IntervalAlarmScreen(
                 }
             }
         }
+        SaveAlarmFooter(
+            isSaving = state.isSaving,
+            onSaveClick = { onAction(IntervalAlarmAction.OnSavePlanClick) },
+        )
+    }
+}
+
+@Composable
+private fun SaveAlarmFooter(
+    isSaving: Boolean,
+    onSaveClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .drawBehind {
+                drawLine(
+                    color = SaveFooterTopBorder,
+                    start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                    end = androidx.compose.ui.geometry.Offset(size.width, 0f),
+                    strokeWidth = 1.dp.toPx(),
+                )
+            }
+            .background(IntervalEditorBackground)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
         Button(
-            onClick = { onAction(IntervalAlarmAction.OnSavePlanClick) },
-            enabled = !state.isSaving,
+            onClick = onSaveClick,
+            enabled = !isSaving,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            shape = MaterialTheme.shapes.large,
+                .height(58.dp)
+                .shadow(
+                    elevation = 16.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    clip = false,
+                ),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = Color.White,
+            ),
         ) {
             Text(
-                text = if (state.isSaving) "Saving..." else "Save Alarm",
-                style = MaterialTheme.typography.titleMedium,
+                text = if (isSaving) "Saving..." else "Save Alarm",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                ),
             )
         }
     }
@@ -316,8 +360,21 @@ private fun TimeWheel(
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.large)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.24f))
-            .padding(horizontal = 10.dp, vertical = 10.dp),
+            .height(WHEEL_VISIBLE_HEIGHT + (WHEEL_OUTER_VERTICAL_PADDING * 2))
+            .padding(
+                horizontal = WHEEL_OUTER_HORIZONTAL_PADDING,
+                vertical = WHEEL_OUTER_VERTICAL_PADDING,
+            ),
     ) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .offset(y = WHEEL_SELECTION_OFFSET)
+                .fillMaxWidth()
+                .height(WHEEL_ITEM_HEIGHT)
+                .clip(MaterialTheme.shapes.medium)
+                .background(TimeWheelSelectionBackground),
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -333,7 +390,7 @@ private fun TimeWheel(
             MeridiemColumn(
                 isAm = isAm,
                 onMeridiemSelected = onMeridiemSelected,
-                modifier = Modifier.width(44.dp),
+                modifier = Modifier.width(58.dp),
             )
         }
     }
@@ -352,14 +409,6 @@ private fun WheelColumns(
             .height(WHEEL_VISIBLE_HEIGHT)
             .clip(MaterialTheme.shapes.medium),
     ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth()
-                .height(WHEEL_ITEM_HEIGHT)
-                .clip(MaterialTheme.shapes.medium)
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)),
-        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
@@ -485,59 +534,110 @@ private fun WheelNumberColumn(
 }
 
 @Composable
+private fun WheelTextColumn(
+    values: List<String>,
+    selectedValue: String,
+    onValueSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val onValueSelectedState = rememberUpdatedState(onValueSelected)
+    val valuesSize = values.size
+    val wheelItemCount = remember(valuesSize) {
+        valuesSize * WHEEL_REPEAT_CYCLES
+    }
+    val initialSelectedValueIndex = values.indexOf(selectedValue).takeIf { it >= 0 } ?: 0
+    val wheelCenterBaseIndex = remember(valuesSize) {
+        ((wheelItemCount / 2) / valuesSize) * valuesSize
+    }
+    val initialIndex = wheelCenterBaseIndex + initialSelectedValueIndex
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+    val snapFlingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
+    val itemHeightPx = with(LocalDensity.current) { WHEEL_ITEM_HEIGHT.roundToPx() }
+    var shouldEmitUserSelection by remember(valuesSize) { mutableStateOf(false) }
+
+    LaunchedEffect(selectedValue, values) {
+        if (listState.isScrollInProgress) return@LaunchedEffect
+        val selectedValueIndex = values.indexOf(selectedValue).takeIf { it >= 0 } ?: return@LaunchedEffect
+        val currentIndex = listState.firstVisibleItemIndex
+        val targetIndex = findNearestWheelIndex(
+            currentIndex = currentIndex,
+            selectedValueIndex = selectedValueIndex,
+            valuesSize = valuesSize,
+            wheelItemCount = wheelItemCount,
+        )
+        if (targetIndex != currentIndex) {
+            listState.scrollToItem(targetIndex)
+        }
+    }
+
+    LaunchedEffect(listState, values) {
+        snapshotFlow { listState.isScrollInProgress }
+            .collect { isScrolling ->
+                if (isScrolling) {
+                    shouldEmitUserSelection = true
+                    return@collect
+                }
+                if (!shouldEmitUserSelection) return@collect
+                val offsetStep = if (listState.firstVisibleItemScrollOffset >= itemHeightPx / 2) 1 else 0
+                val centerIndex = listState.firstVisibleItemIndex + offsetStep
+                val updatedValue = values[centerIndex % valuesSize]
+                onValueSelectedState.value(updatedValue)
+                shouldEmitUserSelection = false
+            }
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = modifier.height(WHEEL_VISIBLE_HEIGHT),
+        flingBehavior = snapFlingBehavior,
+        contentPadding = PaddingValues(vertical = WHEEL_ITEM_HEIGHT * WHEEL_CENTER_OFFSET),
+    ) {
+        items(count = wheelItemCount) { index ->
+            val value = values[index % valuesSize]
+            val offsetStep = if (listState.firstVisibleItemScrollOffset >= itemHeightPx / 2) 1 else 0
+            val centerIndex = listState.firstVisibleItemIndex + offsetStep
+            val distanceFromCenter = abs(index - centerIndex)
+            val isCenterItem = distanceFromCenter == 0
+            Text(
+                text = value,
+                style = if (isCenterItem) {
+                    MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                } else {
+                    MaterialTheme.typography.titleMedium
+                },
+                color = if (isCenterItem) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                        alpha = when (distanceFromCenter) {
+                            1 -> 0.7f
+                            2 -> 0.35f
+                            else -> 0.18f
+                        },
+                    )
+                },
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(WHEEL_ITEM_HEIGHT)
+                    .padding(vertical = 2.dp),
+            )
+        }
+    }
+}
+
+@Composable
 private fun MeridiemColumn(
     isAm: Boolean,
     onMeridiemSelected: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    WheelTextColumn(
+        values = listOf("AM", "PM"),
+        selectedValue = if (isAm) "AM" else "PM",
+        onValueSelected = { selected -> onMeridiemSelected(selected == "AM") },
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        MeridiemChip(
-            label = "AM",
-            selected = isAm,
-            onClick = { onMeridiemSelected(true) },
-        )
-        MeridiemChip(
-            label = "PM",
-            selected = !isAm,
-            onClick = { onMeridiemSelected(false) },
-        )
-    }
-}
-
-@Composable
-private fun MeridiemChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .clip(MaterialTheme.shapes.small)
-            .background(
-                if (selected) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                } else {
-                    Color.Transparent
-                },
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 5.dp),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-        )
-    }
+    )
 }
 
 @Composable
@@ -736,6 +836,14 @@ private fun ToggleCard(
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
+                colors = androidx.compose.material3.SwitchDefaults.colors(
+                    checkedThumbColor = HomeStyleToggleThumb,
+                    uncheckedThumbColor = HomeStyleToggleThumb,
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    uncheckedTrackColor = HomeStyleToggleOffTrack,
+                    checkedBorderColor = Color.Transparent,
+                    uncheckedBorderColor = Color.Transparent,
+                ),
             )
         }
     }
@@ -822,6 +930,15 @@ private const val WHEEL_REPEAT_CYCLES = 200
 private const val WHEEL_CENTER_OFFSET = 2
 private val WHEEL_ITEM_HEIGHT = 42.dp
 private val WHEEL_VISIBLE_HEIGHT = WHEEL_ITEM_HEIGHT * 5
+private val WHEEL_OUTER_HORIZONTAL_PADDING = 10.dp
+private val WHEEL_OUTER_VERTICAL_PADDING = 10.dp
+private val WHEEL_SELECTION_OFFSET = (-3).dp
+
+private val IntervalEditorBackground = Color(0xFF0F1729)
+private val SaveFooterTopBorder = Color(0xFF1E293B)
+private val TimeWheelSelectionBackground = Color(0xFF24344E)
+private val HomeStyleToggleOffTrack = Color(0xFF1E293B)
+private val HomeStyleToggleThumb = Color(0xFFFFFFFF)
 
 @Preview
 @Composable

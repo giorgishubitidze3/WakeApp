@@ -10,11 +10,13 @@ import com.spearson.wakeapp.interval_alarm.domain.model.TimeOfDay
 import com.spearson.wakeapp.interval_alarm.domain.model.Weekday
 import com.spearson.wakeapp.interval_alarm.presentation.util.currentLocalTimeOfDay
 import kotlin.random.Random
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class IntervalAlarmViewModel(
     private val generateAlarmOccurrencesUseCase: GenerateAlarmOccurrencesUseCase,
@@ -211,7 +213,9 @@ class IntervalAlarmViewModel(
             )
             val persistResult = intervalAlarmPlanRepository.upsertPlan(plan)
             val syncResult = if (persistResult.isSuccess) {
-                val occurrences = generateAlarmOccurrencesUseCase(plan)
+                val occurrences = withContext(Dispatchers.Default) {
+                    generateAlarmOccurrencesUseCase(plan)
+                }
                 intervalAlarmScheduler.schedulePlan(plan, occurrences)
             } else {
                 Result.failure(persistResult.exceptionOrNull() ?: IllegalStateException("Plan save failed."))
@@ -263,7 +267,7 @@ class IntervalAlarmViewModel(
             endTime = endTime,
             intervalMinutes = intervalMinutes,
             activeDays = activeDays,
-            isEnabled = isEnabled,
+            isEnabled = true,
         )
     }
 

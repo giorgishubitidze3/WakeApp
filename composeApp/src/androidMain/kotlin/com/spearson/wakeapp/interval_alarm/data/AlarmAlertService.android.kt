@@ -2,6 +2,7 @@ package com.spearson.wakeapp.interval_alarm.data
 
 import android.app.AlarmManager
 import android.app.ActivityOptions
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,6 +15,7 @@ import android.media.Ringtone
 import android.media.RingtoneManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -74,10 +76,12 @@ class AlarmAlertService : Service() {
     private fun startOrUpdateAlarm(payload: AlarmPayload) {
         createAlarmChannelIfNeeded()
         val notificationId = notificationIdFor(payload.requestCode)
+        val shouldUseFullScreenUi = shouldUseFullScreenAlarmUi()
         val fullScreenIntent = buildFullScreenIntent(payload)
         val alarmNotification = buildAlarmNotification(
             payload = payload,
             fullScreenIntent = fullScreenIntent,
+            useFullScreenUi = shouldUseFullScreenUi,
         )
         startForeground(notificationId, alarmNotification)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -85,10 +89,9 @@ class AlarmAlertService : Service() {
             Log.d(TAG, "Full-screen intent permission granted=${notificationManager.canUseFullScreenIntent()}")
         }
         startPlayback()
-        launchAlarmScreenImmediately(
-            payload = payload,
-            fullScreenIntent = fullScreenIntent,
-        )
+        if (!shouldUseFullScreenUi) {
+            Log.d(TAG, "Skipping full-screen alarm UI because device is interactive and unlocked.")
+        }
     }
 
     private fun scheduleSnooze(payload: AlarmPayload) {
@@ -135,6 +138,7 @@ class AlarmAlertService : Service() {
     private fun buildAlarmNotification(
         payload: AlarmPayload,
         fullScreenIntent: PendingIntent,
+        useFullScreenUi: Boolean,
     ): Notification {
         val stopIntent = PendingIntent.getService(
             this,
@@ -149,7 +153,7 @@ class AlarmAlertService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or pendingIntentImmutableFlags(),
         )
 
-        return NotificationCompat.Builder(this, WAKE_ALARM_CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, WAKE_ALARM_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher_round)
             .setContentTitle("Wake up")
             .setContentText("Interval alarm at ${payload.formattedTime}")
@@ -158,11 +162,18 @@ class AlarmAlertService : Service() {
             .setOngoing(true)
             .setAutoCancel(false)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setFullScreenIntent(fullScreenIntent, true)
-            .setContentIntent(fullScreenIntent)
             .addAction(android.R.drawable.ic_lock_idle_alarm, "Snooze", snoozeIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopIntent)
-            .build()
+
+        if (useFullScreenUi) {
+            builder
+                .setFullScreenIntent(fullScreenIntent, true)
+                .setContentIntent(fullScreenIntent)
+        } else {
+            builder.setContentIntent(fullScreenIntent)
+        }
+
+        return builder.build()
     }
 
     private fun buildFullScreenIntent(payload: AlarmPayload): PendingIntent {
@@ -199,61 +210,6 @@ class AlarmAlertService : Service() {
         )
     }
 
-    private fun launchAlarmScreenImmediately(
-        payload: AlarmPayload,
-        fullScreenIntent: PendingIntent,
-    ) {
-        val launchIntent = AlarmRingingActivity.createIntent(
-            context = this,
-            requestCode = payload.requestCode,
-            hour = payload.hour,
-            minute = payload.minute,
-            snoozeMinutes = payload.snoozeMinutes,
-            planId = payload.planId,
-            isSnooze = payload.isSnooze,
-        )
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            runCatching {
-                startActivity(launchIntent)
-            }.onSuccess {
-                Log.d(TAG, "Requested immediate fullscreen activity launch requestCode=${payload.requestCode}")
-            }.onFailure { throwable ->
-                Log.e(
-                    TAG,
-                    "Immediate fullscreen startActivity failed for requestCode=${payload.requestCode}",
-                    throwable,
-                )
-            }
-            return
-        }
-
-        val senderOptions = ActivityOptions.makeBasic().apply {
-            setPendingIntentBackgroundActivityStartMode(
-                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED,
-            )
-        }
-        runCatching {
-            fullScreenIntent.send(
-                this,
-                0,
-                launchIntent,
-                null,
-                null,
-                null,
-                senderOptions.toBundle(),
-            )
-        }.onSuccess {
-            Log.d(TAG, "Requested immediate fullscreen pendingIntent launch requestCode=${payload.requestCode}")
-        }.onFailure { throwable ->
-            Log.e(
-                TAG,
-                "Immediate fullscreen pendingIntent launch failed for requestCode=${payload.requestCode}",
-                throwable,
-            )
-        }
-    }
-
     private fun buildServiceIntent(action: String, payload: AlarmPayload): Intent {
         return Intent(this, AlarmAlertService::class.java).apply {
             this.action = action
@@ -284,6 +240,14 @@ class AlarmAlertService : Service() {
             setSound(null, null)
         }
         notificationManager.createNotificationChannel(channel)
+    }
+
+    private fun shouldUseFullScreenAlarmUi(): Boolean {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        val isInteractive = powerManager?.isInteractive == true
+        val isKeyguardLocked = keyguardManager?.isKeyguardLocked == true
+        return !isInteractive || isKeyguardLocked
     }
 
     private fun startPlayback() {

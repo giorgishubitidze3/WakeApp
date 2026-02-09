@@ -6,11 +6,13 @@ import com.spearson.wakeapp.interval_alarm.domain.GenerateAlarmOccurrencesUseCas
 import com.spearson.wakeapp.interval_alarm.domain.IntervalAlarmPlanRepository
 import com.spearson.wakeapp.interval_alarm.domain.IntervalAlarmScheduler
 import com.spearson.wakeapp.interval_alarm.domain.model.IntervalAlarmPlan
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class AlarmHomeViewModel(
     private val intervalAlarmPlanRepository: IntervalAlarmPlanRepository,
@@ -46,9 +48,7 @@ class AlarmHomeViewModel(
             _state.update { current ->
                 current.copy(
                     isLoading = false,
-                    plans = plansResult.getOrElse { emptyList() }.sortedBy { plan ->
-                        plan.startTime.toMinutesOfDay()
-                    },
+                    plans = sortPlans(plansResult.getOrElse { emptyList() }),
                     statusMessage = if (plansResult.isFailure) {
                         "Unable to load alarms."
                     } else {
@@ -120,9 +120,11 @@ class AlarmHomeViewModel(
 
         _state.update { current ->
             current.copy(
-                plans = current.plans.map { plan ->
-                    if (plan.id == planId) updatedPlan else plan
-                },
+                plans = sortPlans(
+                    current.plans.map { plan ->
+                        if (plan.id == planId) updatedPlan else plan
+                    },
+                ),
             )
         }
 
@@ -130,7 +132,9 @@ class AlarmHomeViewModel(
             val persistResult = intervalAlarmPlanRepository.upsertPlan(updatedPlan)
             val syncResult = if (persistResult.isSuccess) {
                 if (updatedPlan.isEnabled) {
-                    val occurrences = generateAlarmOccurrencesUseCase(updatedPlan)
+                    val occurrences = withContext(Dispatchers.Default) {
+                        generateAlarmOccurrencesUseCase(updatedPlan)
+                    }
                     intervalAlarmScheduler.schedulePlan(updatedPlan, occurrences)
                 } else {
                     intervalAlarmScheduler.cancelPlan(updatedPlan.id)
@@ -151,5 +155,13 @@ class AlarmHomeViewModel(
         _state.update {
             it.copy(statusMessage = null)
         }
+    }
+
+    private fun sortPlans(plans: List<IntervalAlarmPlan>): List<IntervalAlarmPlan> {
+        return plans.sortedWith(
+            compareByDescending<IntervalAlarmPlan> { it.isEnabled }
+                .thenBy { it.startTime.toMinutesOfDay() }
+                .thenBy { it.endTime.toMinutesOfDay() },
+        )
     }
 }

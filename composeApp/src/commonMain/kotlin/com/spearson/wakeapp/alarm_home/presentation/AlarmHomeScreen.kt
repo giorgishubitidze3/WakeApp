@@ -19,11 +19,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.spearson.wakeapp.core.theme.WakeAppTheme
@@ -43,7 +45,7 @@ fun AlarmHomeScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(HomeBackground),
     ) {
         Row(
             modifier = Modifier
@@ -146,7 +148,7 @@ private fun AlarmPlanRow(
     onEnabledChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    Row(
         modifier = modifier
             .combinedClickable(
                 onClick = onClick,
@@ -154,12 +156,12 @@ private fun AlarmPlanRow(
             )
             .fillMaxWidth()
             .padding(horizontal = 18.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.Bottom,
@@ -167,7 +169,9 @@ private fun AlarmPlanRow(
             ) {
                 Text(
                     text = plan.startTime.toClockDisplay(),
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontSize = MaterialTheme.typography.headlineMedium.fontSize * 2f,
+                    ),
                     color = MaterialTheme.colorScheme.onBackground,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -178,34 +182,56 @@ private fun AlarmPlanRow(
                     modifier = Modifier.padding(bottom = 5.dp),
                 )
             }
-            Switch(
-                checked = plan.isEnabled,
-                onCheckedChange = onEnabledChanged,
+            Text(
+                text = "Every ${plan.intervalMinutes} min until ${plan.endTime.toUiLabel()}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-        Text(
-            text = "Every ${plan.intervalMinutes} min until ${plan.endTime.toUiLabel()}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Weekday.entries.forEach { weekday ->
-                val isActive = weekday in plan.activeDays
-                Text(
-                    text = weekday.shortLabel.take(1),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (isActive) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-                    },
-                )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Weekday.entries.forEach { weekday ->
+                    val isActive = weekday in plan.activeDays
+                    Text(
+                        text = weekday.shortLabel.take(1),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (isActive) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                        },
+                    )
+                }
             }
         }
+        AlarmEnabledToggle(
+            checked = plan.isEnabled,
+            onCheckedChange = onEnabledChanged,
+            modifier = Modifier.padding(start = 12.dp),
+        )
     }
+}
+
+@Composable
+private fun AlarmEnabledToggle(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Switch(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        modifier = modifier,
+        colors = SwitchDefaults.colors(
+            checkedThumbColor = ToggleThumb,
+            uncheckedThumbColor = ToggleThumb,
+            checkedTrackColor = MaterialTheme.colorScheme.primary,
+            uncheckedTrackColor = ToggleOffTrack,
+            checkedBorderColor = Color.Transparent,
+            uncheckedBorderColor = Color.Transparent,
+        ),
+    )
 }
 
 @Composable
@@ -243,6 +269,10 @@ private fun com.spearson.wakeapp.interval_alarm.domain.model.TimeOfDay.toClockDi
 private fun com.spearson.wakeapp.interval_alarm.domain.model.TimeOfDay.toAmPm(): String {
     return if (hour < 12) "AM" else "PM"
 }
+
+private val HomeBackground = Color(0xFF0A0A0A)
+private val ToggleOffTrack = Color(0xFF1E293B)
+private val ToggleThumb = Color(0xFFFFFFFF)
 
 @Preview
 @Composable

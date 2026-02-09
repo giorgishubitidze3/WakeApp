@@ -50,6 +50,7 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.TIME_SET" />
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="com.spearson.wakeapp.ALARM_MAINTENANCE_SYNC" />
             </intent-filter>
         </receiver>
     </application>
