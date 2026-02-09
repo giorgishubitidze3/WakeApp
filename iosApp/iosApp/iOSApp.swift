@@ -266,9 +266,9 @@ private actor WakeAppAlarmEngine {
         id: UUID,
         item: AlarmKitScheduleItem
     ) async throws {
-        let recurrence = Alarm.Schedule.Relative.Recurrence.weekly(item.weekdays.toAlarmKitWeekdays())
-        let relativeTime = Alarm.Schedule.Relative.Time(hour: item.time.hour, minute: item.time.minute)
-        let schedule = Alarm.Schedule.Relative(time: relativeTime, repeats: recurrence)
+        let weekdays = item.weekdays.toAlarmKitWeekdays()
+        let time = Alarm.Schedule.Relative.Time(hour: item.time.hour, minute: item.time.minute)
+        let schedule = Alarm.Schedule.relative(.init(time: time, repeats: .weekly(weekdays)))
 
         let stopButton = AlarmButton(
             text: "Dismiss",
@@ -791,7 +791,7 @@ private struct WakeAlarmMetadata: AlarmMetadata, Codable, Hashable, Sendable {
 
 @available(iOS 26.0, *)
 private extension Set where Element == StoredWeekday {
-    func toAlarmKitWeekdays() -> [Alarm.Schedule.Relative.Recurrence.Weekday] {
+    func toAlarmKitWeekdays() -> [Locale.Weekday] {
         self.compactMap { weekday in
             switch weekday {
             case .Monday: .monday
