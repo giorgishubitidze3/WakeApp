@@ -6,7 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val WakeColorScheme = darkColorScheme(
-    primary = Color(0xFF7AC3FF),
+    primary = Color(0xFF3B82F6),
     onPrimary = Color(0xFF002640),
     secondary = Color(0xFFFFB968),
     onSecondary = Color(0xFF3E2300),

@@ -13,6 +13,11 @@ import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_IS_SNOOZE
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_MINUTE
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_PLAN_ID
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_REQUEST_CODE
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_RINGTONE_ID
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_RINGTONE_VOLUME_PERCENT
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_HAPTICS_PATTERN
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_HAPTICS_ONLY
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_HAPTICS_ESCALATE_OVER_TIME
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_SNOOZE_MINUTES
 import com.spearson.wakeapp.interval_alarm.data.android.WAKE_ALARM_ACTION
 
@@ -25,6 +30,11 @@ class AlarmTriggerReceiver : BroadcastReceiver() {
         val planId = intent.getStringExtra(EXTRA_PLAN_ID)
         val snoozeMinutes = intent.getIntExtra(EXTRA_SNOOZE_MINUTES, DEFAULT_SNOOZE_MINUTES)
         val isSnooze = intent.getBooleanExtra(EXTRA_IS_SNOOZE, false)
+        val ringtoneId = intent.getStringExtra(EXTRA_RINGTONE_ID)
+        val ringtoneVolumePercent = intent.getIntExtra(EXTRA_RINGTONE_VOLUME_PERCENT, 100)
+        val hapticsPatternName = intent.getStringExtra(EXTRA_HAPTICS_PATTERN)
+        val hapticsOnly = intent.getBooleanExtra(EXTRA_HAPTICS_ONLY, false)
+        val hapticsEscalateOverTime = intent.getBooleanExtra(EXTRA_HAPTICS_ESCALATE_OVER_TIME, false)
         Log.d(TAG, "Alarm fired requestCode=$requestCode at ${formatTime(hour, minute)}")
 
         runCatching {
@@ -36,6 +46,11 @@ class AlarmTriggerReceiver : BroadcastReceiver() {
                 minute = minute,
                 snoozeMinutes = snoozeMinutes,
                 isSnooze = isSnooze,
+                ringtoneId = ringtoneId,
+                ringtoneVolumePercent = ringtoneVolumePercent,
+                hapticsPatternName = hapticsPatternName,
+                hapticsOnly = hapticsOnly,
+                hapticsEscalateOverTime = hapticsEscalateOverTime,
             )
         }.onFailure { throwable ->
             Log.e(TAG, "Unable to start alarm foreground service for requestCode=$requestCode", throwable)
@@ -48,6 +63,11 @@ class AlarmTriggerReceiver : BroadcastReceiver() {
                     snoozeMinutes = snoozeMinutes,
                     planId = planId,
                     isSnooze = isSnooze,
+                    ringtoneId = ringtoneId,
+                    ringtoneVolumePercent = ringtoneVolumePercent,
+                    hapticsPatternName = hapticsPatternName,
+                    hapticsOnly = hapticsOnly,
+                    hapticsEscalateOverTime = hapticsEscalateOverTime,
                 )
                 context.startActivity(fallbackIntent)
             }.onFailure { fallbackError ->

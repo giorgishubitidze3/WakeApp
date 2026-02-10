@@ -2,15 +2,23 @@ package com.spearson.wakeapp.interval_alarm.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.spearson.wakeapp.interval_alarm.domain.AlarmHapticsPreviewPlayer
+import com.spearson.wakeapp.interval_alarm.domain.AlarmRingtonePreviewPlayer
+import com.spearson.wakeapp.interval_alarm.domain.AlarmRingtoneProvider
 import com.spearson.wakeapp.interval_alarm.domain.GenerateAlarmOccurrencesUseCase
 import com.spearson.wakeapp.interval_alarm.domain.IntervalAlarmPlanRepository
 import com.spearson.wakeapp.interval_alarm.domain.IntervalAlarmScheduler
+import com.spearson.wakeapp.interval_alarm.domain.model.AlarmRingtoneOption
+import com.spearson.wakeapp.interval_alarm.domain.model.HapticsPattern
 import com.spearson.wakeapp.interval_alarm.domain.model.IntervalAlarmPlan
 import com.spearson.wakeapp.interval_alarm.domain.model.TimeOfDay
 import com.spearson.wakeapp.interval_alarm.domain.model.Weekday
 import com.spearson.wakeapp.interval_alarm.presentation.util.currentLocalTimeOfDay
+import kotlin.math.roundToInt
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -22,8 +30,12 @@ class IntervalAlarmViewModel(
     private val generateAlarmOccurrencesUseCase: GenerateAlarmOccurrencesUseCase,
     private val intervalAlarmPlanRepository: IntervalAlarmPlanRepository,
     private val intervalAlarmScheduler: IntervalAlarmScheduler,
+    private val alarmRingtoneProvider: AlarmRingtoneProvider,
+    private val alarmRingtonePreviewPlayer: AlarmRingtonePreviewPlayer,
+    private val alarmHapticsPreviewPlayer: AlarmHapticsPreviewPlayer,
 ) : ViewModel() {
     private val _state = MutableStateFlow(IntervalAlarmState())
+    private var previewAutoStopJob: Job? = null
     val state = _state.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000L),
@@ -39,6 +51,18 @@ class IntervalAlarmViewModel(
             is IntervalAlarmAction.OnScreenOpened -> handleScreenOpened(action.planId)
             IntervalAlarmAction.OnCancelClick -> closeScreen()
             IntervalAlarmAction.OnCloseHandled -> markCloseHandled()
+            IntervalAlarmAction.OnAlarmSoundClick -> openSoundSelection()
+            IntervalAlarmAction.OnAlarmSoundBackClick -> closeSoundSelection()
+            IntervalAlarmAction.OnAlarmSoundDoneClick -> closeSoundSelection()
+            is IntervalAlarmAction.OnAlarmRingtoneSelected -> selectRingtone(action.ringtoneId)
+            is IntervalAlarmAction.OnAlarmRingtonePreviewToggle -> toggleRingtonePreview(action.ringtoneId)
+            is IntervalAlarmAction.OnAlarmVolumeSliderChanged -> handleAlarmVolumeSliderChanged(action.sliderValue)
+            IntervalAlarmAction.OnHapticsClick -> openHapticsSelection()
+            IntervalAlarmAction.OnHapticsBackClick -> closeHapticsSelection()
+            IntervalAlarmAction.OnHapticsSaveClick -> closeHapticsSelection()
+            is IntervalAlarmAction.OnHapticsPatternSelected -> selectHapticsPattern(action.pattern)
+            is IntervalAlarmAction.OnHapticsOnlyChanged -> handleHapticsOnlyChanged(action.enabled)
+            is IntervalAlarmAction.OnHapticsEscalateChanged -> handleHapticsEscalateChanged(action.enabled)
             is IntervalAlarmAction.OnFocusedWindowChanged -> handleFocusedWindowChanged(action.focusedWindow)
             is IntervalAlarmAction.OnHourChanged -> handleHourChanged(action.hour12)
             is IntervalAlarmAction.OnMinuteChanged -> handleMinuteChanged(action.minute)
@@ -54,9 +78,11 @@ class IntervalAlarmViewModel(
     }
 
     private fun handleScreenOpened(planId: String?) {
+        stopAllPreviews()
         if (planId == null) {
             _state.value = newPlanInitialState()
             recalculatePreview()
+            loadAvailableRingtones(preferredRingtoneId = _state.value.selectedRingtoneId)
             return
         }
 
@@ -66,6 +92,7 @@ class IntervalAlarmViewModel(
             if (existingPlan != null) {
                 _state.value = existingPlan.toState()
                 recalculatePreview()
+                loadAvailableRingtones(preferredRingtoneId = existingPlan.ringtoneId)
             } else {
                 _state.update {
                     it.copy(
@@ -78,6 +105,7 @@ class IntervalAlarmViewModel(
     }
 
     private fun closeScreen() {
+        stopAllPreviews()
         _state.update {
             it.copy(shouldCloseScreen = true)
         }
@@ -86,6 +114,34 @@ class IntervalAlarmViewModel(
     private fun markCloseHandled() {
         _state.update {
             it.copy(shouldCloseScreen = false)
+        }
+    }
+
+    private fun openSoundSelection() {
+        stopHapticsPreview()
+        _state.update {
+            it.copy(screenMode = IntervalAlarmScreenMode.SoundSelection)
+        }
+    }
+
+    private fun closeSoundSelection() {
+        stopAllPreviews()
+        _state.update {
+            it.copy(screenMode = IntervalAlarmScreenMode.Editor)
+        }
+    }
+
+    private fun openHapticsSelection() {
+        stopRingtonePreview()
+        _state.update {
+            it.copy(screenMode = IntervalAlarmScreenMode.HapticsSelection)
+        }
+    }
+
+    private fun closeHapticsSelection() {
+        stopAllPreviews()
+        _state.update {
+            it.copy(screenMode = IntervalAlarmScreenMode.Editor)
         }
     }
 
@@ -188,6 +244,142 @@ class IntervalAlarmViewModel(
         }
     }
 
+    private fun selectRingtone(ringtoneId: String) {
+        val selectedOption = _state.value.availableRingtones.firstOrNull { it.id == ringtoneId } ?: return
+        _state.update {
+            it.copy(
+                selectedRingtoneId = selectedOption.id,
+                selectedRingtoneName = selectedOption.name,
+            )
+        }
+    }
+
+    private fun toggleRingtonePreview(ringtoneId: String) {
+        val currentState = _state.value
+        if (currentState.previewPlayingRingtoneId == ringtoneId) {
+            stopRingtonePreview()
+            _state.update {
+                it.copy(previewPlayingRingtoneId = null)
+            }
+            return
+        }
+
+        val selectedOption = currentState.availableRingtones.firstOrNull { it.id == ringtoneId } ?: return
+        val effectiveVolume = currentState.ringtoneVolumePercent.coerceAtMost(FREE_TIER_MAX_VOLUME_PERCENT)
+        viewModelScope.launch {
+            stopRingtonePreview()
+            val playResult = alarmRingtonePreviewPlayer.playPreview(
+                ringtoneId = selectedOption.id,
+                volumePercent = effectiveVolume,
+            )
+            _state.update {
+                it.copy(
+                    previewPlayingRingtoneId = if (playResult.isSuccess) selectedOption.id else null,
+                    statusMessage = if (playResult.isFailure) {
+                        playResult.exceptionOrNull()?.message ?: "Unable to preview ringtone."
+                    } else {
+                        it.statusMessage
+                    },
+                )
+            }
+
+            if (playResult.isSuccess) {
+                previewAutoStopJob = viewModelScope.launch {
+                    delay(RINGTONE_PREVIEW_DURATION_MILLIS)
+                    if (_state.value.previewPlayingRingtoneId == selectedOption.id) {
+                        stopRingtonePreview()
+                        _state.update { state ->
+                            state.copy(previewPlayingRingtoneId = null)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun handleAlarmVolumeSliderChanged(sliderValue: Float) {
+        val sanitizedSliderValue = sliderValue.coerceIn(0f, FREE_TIER_SLIDER_MAX_VALUE)
+        val mappedPercent = (
+            (sanitizedSliderValue / FREE_TIER_SLIDER_MAX_VALUE) *
+                FREE_TIER_MAX_VOLUME_PERCENT
+            ).roundToInt()
+        _state.update {
+            it.copy(
+                ringtoneVolumePercent = mappedPercent,
+            )
+        }
+    }
+
+    private fun selectHapticsPattern(pattern: HapticsPattern) {
+        _state.update {
+            it.copy(selectedHapticsPattern = pattern)
+        }
+        previewHapticsPattern(pattern = pattern)
+    }
+
+    private fun handleHapticsOnlyChanged(enabled: Boolean) {
+        _state.update {
+            val resolvedPattern = if (enabled && it.selectedHapticsPattern == HapticsPattern.NoneOff) {
+                HapticsPattern.GentlePulse
+            } else {
+                it.selectedHapticsPattern
+            }
+            it.copy(
+                hapticsOnly = enabled,
+                selectedHapticsPattern = resolvedPattern,
+            )
+        }
+    }
+
+    private fun handleHapticsEscalateChanged(enabled: Boolean) {
+        _state.update {
+            it.copy(hapticsEscalateOverTime = enabled)
+        }
+        if (
+            _state.value.screenMode == IntervalAlarmScreenMode.HapticsSelection &&
+            _state.value.selectedHapticsPattern != HapticsPattern.NoneOff
+        ) {
+            previewHapticsPattern(
+                pattern = _state.value.selectedHapticsPattern,
+            )
+        }
+    }
+
+    private fun previewHapticsPattern(pattern: HapticsPattern) {
+        if (pattern == HapticsPattern.NoneOff) {
+            stopHapticsPreview()
+            return
+        }
+        viewModelScope.launch {
+            stopRingtonePreview()
+            stopHapticsPreview()
+            val escalate = _state.value.hapticsEscalateOverTime
+            val previewResult = alarmHapticsPreviewPlayer.playPreview(
+                pattern = pattern,
+                escalateOverTime = escalate,
+            )
+            _state.update {
+                it.copy(
+                    previewPlayingHapticsPattern = if (previewResult.isSuccess) pattern else null,
+                    statusMessage = if (previewResult.isFailure) {
+                        previewResult.exceptionOrNull()?.message ?: "Unable to preview haptics."
+                    } else {
+                        it.statusMessage
+                    },
+                )
+            }
+
+            if (previewResult.isSuccess) {
+                previewAutoStopJob = viewModelScope.launch {
+                    delay(HAPTICS_PREVIEW_DURATION_MILLIS)
+                    if (_state.value.previewPlayingHapticsPattern == pattern) {
+                        stopHapticsPreview()
+                    }
+                }
+            }
+        }
+    }
+
     private fun handleWeekdayToggle(weekday: Weekday) {
         _state.update { current ->
             if (weekday in current.activeDays && current.activeDays.size == 1) {
@@ -206,6 +398,7 @@ class IntervalAlarmViewModel(
 
     private fun savePlan() {
         viewModelScope.launch {
+            stopAllPreviews()
             _state.update { it.copy(isSaving = true, statusMessage = null) }
             val existingPlanId = _state.value.editingPlanId
             val plan = _state.value.toPlan(
@@ -245,6 +438,39 @@ class IntervalAlarmViewModel(
         }
     }
 
+    private fun loadAvailableRingtones(preferredRingtoneId: String) {
+        viewModelScope.launch {
+            _state.update { current ->
+                current.copy(isLoadingRingtones = true)
+            }
+            val ringtoneResult = alarmRingtoneProvider.getAvailableRingtones()
+            val ringtoneOptions = ringtoneResult.getOrNull().orEmpty()
+            _state.update { current ->
+                if (ringtoneOptions.isEmpty()) {
+                    current.copy(
+                        availableRingtones = emptyList(),
+                        isLoadingRingtones = false,
+                        statusMessage = ringtoneResult.exceptionOrNull()?.message ?: current.statusMessage,
+                    )
+                } else {
+                    val selected = ringtoneOptions.firstOrNull { it.id == preferredRingtoneId }
+                        ?: ringtoneOptions.first()
+                    current.copy(
+                        availableRingtones = ringtoneOptions,
+                        selectedRingtoneId = selected.id,
+                        selectedRingtoneName = selected.name,
+                        isLoadingRingtones = false,
+                        statusMessage = if (ringtoneResult.isFailure) {
+                            ringtoneResult.exceptionOrNull()?.message ?: current.statusMessage
+                        } else {
+                            current.statusMessage
+                        },
+                    )
+                }
+            }
+        }
+    }
+
     private fun recalculatePreview() {
         _state.update {
             val previewTimes = generateAlarmOccurrencesUseCase.generateTimes(
@@ -260,6 +486,37 @@ class IntervalAlarmViewModel(
         }
     }
 
+    private fun stopRingtonePreview() {
+        previewAutoStopJob?.cancel()
+        previewAutoStopJob = null
+        alarmRingtonePreviewPlayer.stopPreview()
+        _state.update {
+            it.copy(previewPlayingRingtoneId = null)
+        }
+    }
+
+    private fun stopHapticsPreview() {
+        previewAutoStopJob?.cancel()
+        previewAutoStopJob = null
+        alarmHapticsPreviewPlayer.stopPreview()
+        _state.update {
+            it.copy(previewPlayingHapticsPattern = null)
+        }
+    }
+
+    private fun stopAllPreviews() {
+        previewAutoStopJob?.cancel()
+        previewAutoStopJob = null
+        alarmRingtonePreviewPlayer.stopPreview()
+        alarmHapticsPreviewPlayer.stopPreview()
+        _state.update {
+            it.copy(
+                previewPlayingRingtoneId = null,
+                previewPlayingHapticsPattern = null,
+            )
+        }
+    }
+
     private fun IntervalAlarmState.toPlan(planId: String): IntervalAlarmPlan {
         return IntervalAlarmPlan(
             id = planId,
@@ -267,6 +524,12 @@ class IntervalAlarmViewModel(
             endTime = endTime,
             intervalMinutes = intervalMinutes,
             activeDays = activeDays,
+            ringtoneId = selectedRingtoneId,
+            ringtoneName = selectedRingtoneName,
+            ringtoneVolumePercent = ringtoneVolumePercent.coerceAtMost(FREE_TIER_MAX_VOLUME_PERCENT),
+            hapticsPattern = selectedHapticsPattern,
+            hapticsOnly = hapticsOnly,
+            hapticsEscalateOverTime = hapticsEscalateOverTime,
             isEnabled = true,
         )
     }
@@ -280,6 +543,12 @@ class IntervalAlarmViewModel(
             intervalInput = intervalMinutes.toString(),
             isEnabled = isEnabled,
             activeDays = activeDays,
+            selectedRingtoneId = ringtoneId,
+            selectedRingtoneName = ringtoneName,
+            ringtoneVolumePercent = ringtoneVolumePercent,
+            selectedHapticsPattern = hapticsPattern,
+            hapticsOnly = hapticsOnly,
+            hapticsEscalateOverTime = hapticsEscalateOverTime,
         )
     }
 
@@ -324,6 +593,11 @@ class IntervalAlarmViewModel(
         return if (isAm) normalizedHour else normalizedHour + HOURS_PER_HALF_DAY
     }
 
+    override fun onCleared() {
+        stopAllPreviews()
+        super.onCleared()
+    }
+
     private companion object {
         const val INTERVAL_MIN = 1
         const val INTERVAL_MAX = 60
@@ -335,5 +609,9 @@ class IntervalAlarmViewModel(
         const val MINUTE_MAX = 59
         const val NEW_PLAN_DEFAULT_WINDOW_MINUTES = 30
         const val MINUTES_PER_DAY = 1_440
+        const val RINGTONE_PREVIEW_DURATION_MILLIS = 3_000L
+        const val HAPTICS_PREVIEW_DURATION_MILLIS = 1_800L
+        const val FREE_TIER_MAX_VOLUME_PERCENT = 100
+        const val FREE_TIER_SLIDER_MAX_VALUE = 0.5f
     }
 }

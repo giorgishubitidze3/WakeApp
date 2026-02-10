@@ -40,6 +40,11 @@ import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_IS_SNOOZE
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_MINUTE
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_PLAN_ID
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_REQUEST_CODE
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_RINGTONE_ID
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_RINGTONE_VOLUME_PERCENT
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_HAPTICS_PATTERN
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_HAPTICS_ONLY
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_HAPTICS_ESCALATE_OVER_TIME
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_SNOOZE_MINUTES
 
 class AlarmRingingActivity : ComponentActivity() {
@@ -50,6 +55,11 @@ class AlarmRingingActivity : ComponentActivity() {
     private var snoozeMinutes: Int = DEFAULT_SNOOZE_MINUTES
     private var planId: String? = null
     private var isSnooze: Boolean = false
+    private var ringtoneId: String? = null
+    private var ringtoneVolumePercent: Int = 100
+    private var hapticsPatternName: String? = null
+    private var hapticsOnly: Boolean = false
+    private var hapticsEscalateOverTime: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,6 +83,11 @@ class AlarmRingingActivity : ComponentActivity() {
             ?: DEFAULT_SNOOZE_MINUTES
         planId = intent?.getStringExtra(EXTRA_PLAN_ID)
         isSnooze = intent?.getBooleanExtra(EXTRA_IS_SNOOZE, false) ?: false
+        ringtoneId = intent?.getStringExtra(EXTRA_RINGTONE_ID)
+        ringtoneVolumePercent = intent?.getIntExtra(EXTRA_RINGTONE_VOLUME_PERCENT, 100) ?: 100
+        hapticsPatternName = intent?.getStringExtra(EXTRA_HAPTICS_PATTERN)
+        hapticsOnly = intent?.getBooleanExtra(EXTRA_HAPTICS_ONLY, false) ?: false
+        hapticsEscalateOverTime = intent?.getBooleanExtra(EXTRA_HAPTICS_ESCALATE_OVER_TIME, false) ?: false
     }
 
     private fun configureWindowForAlarm() {
@@ -105,6 +120,11 @@ class AlarmRingingActivity : ComponentActivity() {
                             minute = minute,
                             snoozeMinutes = snoozeMinutes,
                             isSnooze = isSnooze,
+                            ringtoneId = ringtoneId,
+                            ringtoneVolumePercent = ringtoneVolumePercent,
+                            hapticsPatternName = hapticsPatternName,
+                            hapticsOnly = hapticsOnly,
+                            hapticsEscalateOverTime = hapticsEscalateOverTime,
                         )
                         finishAndRemoveTask()
                     },
@@ -116,6 +136,11 @@ class AlarmRingingActivity : ComponentActivity() {
                             hour = hour,
                             minute = minute,
                             snoozeMinutes = snoozeMinutes,
+                            ringtoneId = ringtoneId,
+                            ringtoneVolumePercent = ringtoneVolumePercent,
+                            hapticsPatternName = hapticsPatternName,
+                            hapticsOnly = hapticsOnly,
+                            hapticsEscalateOverTime = hapticsEscalateOverTime,
                         )
                         finishAndRemoveTask()
                     },
@@ -144,6 +169,11 @@ class AlarmRingingActivity : ComponentActivity() {
             snoozeMinutes: Int,
             planId: String?,
             isSnooze: Boolean,
+            ringtoneId: String?,
+            ringtoneVolumePercent: Int,
+            hapticsPatternName: String?,
+            hapticsOnly: Boolean,
+            hapticsEscalateOverTime: Boolean,
         ): Intent {
             return Intent(context, AlarmRingingActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -155,6 +185,11 @@ class AlarmRingingActivity : ComponentActivity() {
                 putExtra(EXTRA_SNOOZE_MINUTES, snoozeMinutes)
                 putExtra(EXTRA_IS_SNOOZE, isSnooze)
                 planId?.let { putExtra(EXTRA_PLAN_ID, it) }
+                ringtoneId?.let { putExtra(EXTRA_RINGTONE_ID, it) }
+                putExtra(EXTRA_RINGTONE_VOLUME_PERCENT, ringtoneVolumePercent)
+                hapticsPatternName?.let { putExtra(EXTRA_HAPTICS_PATTERN, it) }
+                putExtra(EXTRA_HAPTICS_ONLY, hapticsOnly)
+                putExtra(EXTRA_HAPTICS_ESCALATE_OVER_TIME, hapticsEscalateOverTime)
             }
         }
     }

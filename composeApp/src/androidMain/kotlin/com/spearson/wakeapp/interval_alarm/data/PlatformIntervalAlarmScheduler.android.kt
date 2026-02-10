@@ -11,6 +11,11 @@ import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_IS_SNOOZE
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_MINUTE
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_PLAN_ID
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_REQUEST_CODE
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_RINGTONE_ID
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_RINGTONE_VOLUME_PERCENT
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_HAPTICS_PATTERN
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_HAPTICS_ONLY
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_HAPTICS_ESCALATE_OVER_TIME
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_SNOOZE_MINUTES
 import com.spearson.wakeapp.interval_alarm.data.android.SCHEDULER_PREFS
 import com.spearson.wakeapp.interval_alarm.data.android.WAKE_ALARM_ACTION
@@ -91,6 +96,11 @@ class PlatformIntervalAlarmScheduler : IntervalAlarmScheduler, KoinComponent {
                 requestCode = requestCode,
                 time = candidate.occurrence.time,
                 snoozeMinutes = plan.snoozeMinutes,
+                ringtoneId = plan.ringtoneId,
+                ringtoneVolumePercent = plan.ringtoneVolumePercent,
+                hapticsPattern = plan.hapticsPattern.name,
+                hapticsOnly = plan.hapticsOnly,
+                hapticsEscalateOverTime = plan.hapticsEscalateOverTime,
             )
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
@@ -297,6 +307,11 @@ class PlatformIntervalAlarmScheduler : IntervalAlarmScheduler, KoinComponent {
         requestCode: Int,
         time: TimeOfDay,
         snoozeMinutes: Int,
+        ringtoneId: String,
+        ringtoneVolumePercent: Int,
+        hapticsPattern: String,
+        hapticsOnly: Boolean,
+        hapticsEscalateOverTime: Boolean,
     ): Intent {
         return buildBaseAlarmIntent().apply {
             putExtra(EXTRA_PLAN_ID, planId)
@@ -305,6 +320,11 @@ class PlatformIntervalAlarmScheduler : IntervalAlarmScheduler, KoinComponent {
             putExtra(EXTRA_MINUTE, time.minute)
             putExtra(EXTRA_SNOOZE_MINUTES, snoozeMinutes)
             putExtra(EXTRA_IS_SNOOZE, false)
+            putExtra(EXTRA_RINGTONE_ID, ringtoneId)
+            putExtra(EXTRA_RINGTONE_VOLUME_PERCENT, ringtoneVolumePercent)
+            putExtra(EXTRA_HAPTICS_PATTERN, hapticsPattern)
+            putExtra(EXTRA_HAPTICS_ONLY, hapticsOnly)
+            putExtra(EXTRA_HAPTICS_ESCALATE_OVER_TIME, hapticsEscalateOverTime)
         }
     }
 

@@ -678,6 +678,9 @@ private struct StoredIntervalPlan: Decodable {
     let activeDays: Set<StoredWeekday>
     let isEnabled: Bool
     let snoozeMinutes: Int
+    let ringtoneID: String
+    let ringtoneName: String
+    let ringtoneVolumePercent: Int
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -687,6 +690,9 @@ private struct StoredIntervalPlan: Decodable {
         case activeDays
         case isEnabled
         case snoozeMinutes
+        case ringtoneID = "ringtoneId"
+        case ringtoneName
+        case ringtoneVolumePercent
     }
 
     init(from decoder: Decoder) throws {
@@ -699,6 +705,9 @@ private struct StoredIntervalPlan: Decodable {
             ?? Set(StoredWeekday.allCases)
         isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         snoozeMinutes = try container.decodeIfPresent(Int.self, forKey: .snoozeMinutes) ?? 5
+        ringtoneID = try container.decodeIfPresent(String.self, forKey: .ringtoneID) ?? "system_default_alarm"
+        ringtoneName = try container.decodeIfPresent(String.self, forKey: .ringtoneName) ?? "Morning Breeze"
+        ringtoneVolumePercent = try container.decodeIfPresent(Int.self, forKey: .ringtoneVolumePercent) ?? 100
     }
 }
 

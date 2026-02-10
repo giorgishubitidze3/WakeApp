@@ -12,8 +12,8 @@ sealed interface Route {
     ): Route
 
     @Serializable
-    data object Stats: Route
+    data object Timer: Route
 
     @Serializable
-    data object Settings: Route
+    data object Stopwatch: Route
 }

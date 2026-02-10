@@ -1,19 +1,23 @@
 package com.spearson.wakeapp.core.presentation
 
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -24,8 +28,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.spearson.wakeapp.alarm_home.presentation.AlarmHomeRoot
 import com.spearson.wakeapp.interval_alarm.presentation.IntervalAlarmRoot
-import com.spearson.wakeapp.settings.presentation.SettingsScreen
-import com.spearson.wakeapp.stats.presentation.StatsScreen
+import com.spearson.wakeapp.stopwatch.presentation.StopwatchRoot
+import com.spearson.wakeapp.timer.presentation.TimerRoot
 
 @Composable
 fun NavigationRoot(
@@ -39,10 +43,13 @@ fun NavigationRoot(
         modifier = modifier,
         bottomBar = {
             if (currentDestination.isTopLevelDestination()) {
-                NavigationBar {
+                NavigationBar(
+                    containerColor = BottomNavBackground,
+                ) {
                     topLevelDestinations.forEach { destination ->
+                        val isSelected = currentDestination.isDestinationSelected(destination.route)
                         NavigationBarItem(
-                            selected = currentDestination.isDestinationSelected(destination.route),
+                            selected = isSelected,
                             onClick = {
                                 navController.navigate(destination.route) {
                                     popUpTo<Route.Alarms> {
@@ -56,9 +63,13 @@ fun NavigationRoot(
                                 Icon(
                                     imageVector = destination.icon,
                                     contentDescription = destination.label,
+                                    modifier = Modifier.size(if (isSelected) 28.dp else 24.dp),
                                 )
                             },
                             label = { Text(destination.label) },
+                            colors = NavigationBarItemDefaults.colors(
+                                indicatorColor = Color.Transparent,
+                            ),
                         )
                     }
                 }
@@ -86,11 +97,11 @@ fun NavigationRoot(
                     },
                 )
             }
-            composable<Route.Stats> {
-                StatsScreen()
+            composable<Route.Timer> {
+                TimerRoot()
             }
-            composable<Route.Settings> {
-                SettingsScreen()
+            composable<Route.Stopwatch> {
+                StopwatchRoot()
             }
         }
     }
@@ -109,23 +120,25 @@ private val topLevelDestinations = listOf(
         icon = Icons.Default.Alarm,
     ),
     TopLevelDestination(
-        route = Route.Stats,
-        label = "Stats",
-        icon = Icons.Default.BarChart,
+        route = Route.Timer,
+        label = "Timer",
+        icon = Icons.Default.Timer,
     ),
     TopLevelDestination(
-        route = Route.Settings,
-        label = "Settings",
-        icon = Icons.Default.Settings,
+        route = Route.Stopwatch,
+        label = "Stopwatch",
+        icon = Icons.Default.AccessTime,
     ),
 )
+
+private val BottomNavBackground = Color(0xFF0A0A0A)
 
 private fun NavDestination?.isTopLevelDestination(): Boolean {
     if (this == null) return false
     return hierarchy.any { destination ->
         destination.hasRoute<Route.Alarms>() ||
-            destination.hasRoute<Route.Stats>() ||
-            destination.hasRoute<Route.Settings>()
+            destination.hasRoute<Route.Timer>() ||
+            destination.hasRoute<Route.Stopwatch>()
     }
 }
 
@@ -134,7 +147,7 @@ private fun NavDestination?.isDestinationSelected(route: Route): Boolean {
     return when (route) {
         Route.Alarms -> hierarchy.any { it.hasRoute<Route.Alarms>() }
         is Route.CreateAlarm -> hierarchy.any { it.hasRoute<Route.CreateAlarm>() }
-        Route.Stats -> hierarchy.any { it.hasRoute<Route.Stats>() }
-        Route.Settings -> hierarchy.any { it.hasRoute<Route.Settings>() }
+        Route.Timer -> hierarchy.any { it.hasRoute<Route.Timer>() }
+        Route.Stopwatch -> hierarchy.any { it.hasRoute<Route.Stopwatch>() }
     }
 }

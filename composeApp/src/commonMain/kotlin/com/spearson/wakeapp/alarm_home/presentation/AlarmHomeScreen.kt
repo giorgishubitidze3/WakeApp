@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -29,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.spearson.wakeapp.core.theme.WakeAppTheme
+import com.spearson.wakeapp.interval_alarm.domain.model.HapticsPattern
 import com.spearson.wakeapp.interval_alarm.domain.model.IntervalAlarmPlan
 import com.spearson.wakeapp.interval_alarm.domain.model.Weekday
 import com.spearson.wakeapp.interval_alarm.presentation.util.toUiLabel
@@ -181,6 +184,16 @@ private fun AlarmPlanRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 5.dp),
                 )
+                if (plan.selectedHapticsEnabled()) {
+                    Icon(
+                        imageVector = Icons.Default.Vibration,
+                        contentDescription = "Haptics enabled",
+                        tint = HapticsIconColor,
+                        modifier = Modifier
+                            .padding(bottom = 4.dp, start = 2.dp)
+                            .size(16.dp),
+                    )
+                }
             }
             Text(
                 text = "Every ${plan.intervalMinutes} min until ${plan.endTime.toUiLabel()}",
@@ -270,9 +283,14 @@ private fun com.spearson.wakeapp.interval_alarm.domain.model.TimeOfDay.toAmPm():
     return if (hour < 12) "AM" else "PM"
 }
 
+private fun IntervalAlarmPlan.selectedHapticsEnabled(): Boolean {
+    return hapticsPattern != HapticsPattern.NoneOff
+}
+
 private val HomeBackground = Color(0xFF0A0A0A)
 private val ToggleOffTrack = Color(0xFF1E293B)
 private val ToggleThumb = Color(0xFFFFFFFF)
+private val HapticsIconColor = Color(0xFFF59E0B)
 
 @Preview
 @Composable

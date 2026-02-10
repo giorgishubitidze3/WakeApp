@@ -13,6 +13,7 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.media.Ringtone
 import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -29,10 +30,17 @@ import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_IS_SNOOZE
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_MINUTE
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_PLAN_ID
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_REQUEST_CODE
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_RINGTONE_ID
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_RINGTONE_VOLUME_PERCENT
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_HAPTICS_PATTERN
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_HAPTICS_ONLY
+import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_HAPTICS_ESCALATE_OVER_TIME
 import com.spearson.wakeapp.interval_alarm.data.android.EXTRA_SNOOZE_MINUTES
+import com.spearson.wakeapp.interval_alarm.data.android.AlarmHapticsPatterns
 import com.spearson.wakeapp.interval_alarm.data.android.WAKE_ALARM_ACTION
 import com.spearson.wakeapp.interval_alarm.data.android.WAKE_ALARM_CHANNEL_ID
 import com.spearson.wakeapp.interval_alarm.data.android.WAKE_ALARM_CHANNEL_NAME
+import com.spearson.wakeapp.interval_alarm.domain.model.HapticsPattern
 import java.util.Calendar
 
 class AlarmAlertService : Service() {
@@ -88,7 +96,7 @@ class AlarmAlertService : Service() {
             val notificationManager = getSystemService(NotificationManager::class.java)
             Log.d(TAG, "Full-screen intent permission granted=${notificationManager.canUseFullScreenIntent()}")
         }
-        startPlayback()
+        startPlayback(payload)
         if (!shouldUseFullScreenUi) {
             Log.d(TAG, "Skipping full-screen alarm UI because device is interactive and unlocked.")
         }
@@ -109,6 +117,11 @@ class AlarmAlertService : Service() {
             putExtra(EXTRA_MINUTE, triggerCalendar.get(Calendar.MINUTE))
             putExtra(EXTRA_SNOOZE_MINUTES, snoozeMinutes)
             putExtra(EXTRA_IS_SNOOZE, true)
+            payload.ringtoneId?.let { putExtra(EXTRA_RINGTONE_ID, it) }
+            putExtra(EXTRA_RINGTONE_VOLUME_PERCENT, payload.ringtoneVolumePercent)
+            putExtra(EXTRA_HAPTICS_PATTERN, payload.hapticsPattern.name)
+            putExtra(EXTRA_HAPTICS_ONLY, payload.hapticsOnly)
+            putExtra(EXTRA_HAPTICS_ESCALATE_OVER_TIME, payload.hapticsEscalateOverTime)
         }
         val snoozePendingIntent = PendingIntent.getBroadcast(
             this,
@@ -185,6 +198,11 @@ class AlarmAlertService : Service() {
             snoozeMinutes = payload.snoozeMinutes,
             planId = payload.planId,
             isSnooze = payload.isSnooze,
+            ringtoneId = payload.ringtoneId,
+            ringtoneVolumePercent = payload.ringtoneVolumePercent,
+            hapticsPatternName = payload.hapticsPattern.name,
+            hapticsOnly = payload.hapticsOnly,
+            hapticsEscalateOverTime = payload.hapticsEscalateOverTime,
         )
         val pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT or pendingIntentImmutableFlags()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -219,6 +237,11 @@ class AlarmAlertService : Service() {
             putExtra(EXTRA_MINUTE, payload.minute)
             putExtra(EXTRA_SNOOZE_MINUTES, payload.snoozeMinutes)
             putExtra(EXTRA_IS_SNOOZE, payload.isSnooze)
+            payload.ringtoneId?.let { putExtra(EXTRA_RINGTONE_ID, it) }
+            putExtra(EXTRA_RINGTONE_VOLUME_PERCENT, payload.ringtoneVolumePercent)
+            putExtra(EXTRA_HAPTICS_PATTERN, payload.hapticsPattern.name)
+            putExtra(EXTRA_HAPTICS_ONLY, payload.hapticsOnly)
+            putExtra(EXTRA_HAPTICS_ESCALATE_OVER_TIME, payload.hapticsEscalateOverTime)
         }
     }
 
@@ -250,10 +273,21 @@ class AlarmAlertService : Service() {
         return !isInteractive || isKeyguardLocked
     }
 
-    private fun startPlayback() {
+    private fun startPlayback(payload: AlarmPayload) {
         stopPlayback()
+        startVibration(payload)
 
-        val alarmUri = RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM)
+        if (payload.hapticsOnly) {
+            Log.d(TAG, "Haptics-only mode active; skipping ringtone playback.")
+            return
+        }
+
+        val configuredAlarmUri = payload.ringtoneId
+            ?.takeUnless { it.isBlank() }
+            ?.let { ringtoneId -> runCatching { Uri.parse(ringtoneId) }.getOrNull() }
+            ?.takeIf { parsedUri -> !parsedUri.scheme.isNullOrBlank() }
+        val alarmUri = configuredAlarmUri
+            ?: RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
@@ -264,6 +298,9 @@ class AlarmAlertService : Service() {
                 .build()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 isLooping = true
+                val normalizedVolume =
+                    payload.ringtoneVolumePercent.coerceIn(MIN_VOLUME_PERCENT, MAX_FREE_VOLUME_PERCENT) / 100f
+                setVolume(normalizedVolume)
             }
             play()
         }
@@ -271,20 +308,40 @@ class AlarmAlertService : Service() {
         if (ringtone == null) {
             Log.w(TAG, "Unable to start ringtone playback for alarm.")
         }
-        startVibration()
     }
 
-    private fun startVibration() {
+    private fun startVibration(payload: AlarmPayload) {
+        if (!AlarmHapticsPatterns.shouldVibrate(payload.hapticsPattern)) {
+            return
+        }
         val resolvedVibrator = resolveVibrator() ?: return
         if (!resolvedVibrator.hasVibrator()) return
 
         vibrator = resolvedVibrator
-        val pattern = longArrayOf(0L, 500L, 500L)
+        val waveform = AlarmHapticsPatterns.buildAlarmWaveform(
+            pattern = payload.hapticsPattern,
+            escalateOverTime = payload.hapticsEscalateOverTime,
+        )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            resolvedVibrator.vibrate(VibrationEffect.createWaveform(pattern, 0))
+            if (resolvedVibrator.hasAmplitudeControl()) {
+                resolvedVibrator.vibrate(
+                    VibrationEffect.createWaveform(
+                        waveform.timings,
+                        waveform.amplitudes,
+                        waveform.repeatIndex,
+                    ),
+                )
+            } else {
+                resolvedVibrator.vibrate(
+                    VibrationEffect.createWaveform(
+                        waveform.timings,
+                        waveform.repeatIndex,
+                    ),
+                )
+            }
         } else {
             @Suppress("DEPRECATION")
-            resolvedVibrator.vibrate(pattern, 0)
+            resolvedVibrator.vibrate(waveform.timings, waveform.repeatIndex)
         }
     }
 
@@ -341,6 +398,11 @@ class AlarmAlertService : Service() {
         val snoozeMinutes: Int,
         val planId: String?,
         val isSnooze: Boolean,
+        val ringtoneId: String?,
+        val ringtoneVolumePercent: Int,
+        val hapticsPattern: HapticsPattern,
+        val hapticsOnly: Boolean,
+        val hapticsEscalateOverTime: Boolean,
     ) {
         val formattedTime: String
             get() {
@@ -362,7 +424,18 @@ class AlarmAlertService : Service() {
                         ?: DEFAULT_SNOOZE_MINUTES,
                     planId = intent?.getStringExtra(EXTRA_PLAN_ID),
                     isSnooze = intent?.getBooleanExtra(EXTRA_IS_SNOOZE, false) ?: false,
+                    ringtoneId = intent?.getStringExtra(EXTRA_RINGTONE_ID),
+                    ringtoneVolumePercent = intent?.getIntExtra(EXTRA_RINGTONE_VOLUME_PERCENT, 100) ?: 100,
+                    hapticsPattern = parseHapticsPattern(intent?.getStringExtra(EXTRA_HAPTICS_PATTERN)),
+                    hapticsOnly = intent?.getBooleanExtra(EXTRA_HAPTICS_ONLY, false) ?: false,
+                    hapticsEscalateOverTime = intent?.getBooleanExtra(EXTRA_HAPTICS_ESCALATE_OVER_TIME, false) ?: false,
                 )
+            }
+
+            private fun parseHapticsPattern(name: String?): HapticsPattern {
+                return name
+                    ?.let { encoded -> runCatching { HapticsPattern.valueOf(encoded) }.getOrNull() }
+                    ?: HapticsPattern.GentlePulse
             }
         }
     }
@@ -375,6 +448,8 @@ class AlarmAlertService : Service() {
         private const val ALARM_NOTIFICATION_ID_OFFSET = 20_000
         private const val SNOOZE_REQUEST_CODE_OFFSET = 10_000_000
         private const val MILLIS_PER_MINUTE = 60_000L
+        private const val MIN_VOLUME_PERCENT = 0
+        private const val MAX_FREE_VOLUME_PERCENT = 100
 
         fun startAlarm(
             context: Context,
@@ -384,6 +459,11 @@ class AlarmAlertService : Service() {
             minute: Int,
             snoozeMinutes: Int,
             isSnooze: Boolean,
+            ringtoneId: String?,
+            ringtoneVolumePercent: Int,
+            hapticsPatternName: String?,
+            hapticsOnly: Boolean,
+            hapticsEscalateOverTime: Boolean,
         ) {
             val startIntent = Intent(context, AlarmAlertService::class.java).apply {
                 action = ACTION_START_ALARM
@@ -393,6 +473,11 @@ class AlarmAlertService : Service() {
                 putExtra(EXTRA_MINUTE, minute)
                 putExtra(EXTRA_SNOOZE_MINUTES, snoozeMinutes)
                 putExtra(EXTRA_IS_SNOOZE, isSnooze)
+                ringtoneId?.let { putExtra(EXTRA_RINGTONE_ID, it) }
+                putExtra(EXTRA_RINGTONE_VOLUME_PERCENT, ringtoneVolumePercent)
+                hapticsPatternName?.let { putExtra(EXTRA_HAPTICS_PATTERN, it) }
+                putExtra(EXTRA_HAPTICS_ONLY, hapticsOnly)
+                putExtra(EXTRA_HAPTICS_ESCALATE_OVER_TIME, hapticsEscalateOverTime)
             }
             ContextCompat.startForegroundService(context, startIntent)
         }
@@ -405,6 +490,11 @@ class AlarmAlertService : Service() {
             minute: Int,
             snoozeMinutes: Int,
             isSnooze: Boolean,
+            ringtoneId: String?,
+            ringtoneVolumePercent: Int,
+            hapticsPatternName: String?,
+            hapticsOnly: Boolean,
+            hapticsEscalateOverTime: Boolean,
         ) {
             context.startService(
                 Intent(context, AlarmAlertService::class.java).apply {
@@ -415,6 +505,11 @@ class AlarmAlertService : Service() {
                     putExtra(EXTRA_MINUTE, minute)
                     putExtra(EXTRA_SNOOZE_MINUTES, snoozeMinutes)
                     putExtra(EXTRA_IS_SNOOZE, isSnooze)
+                    ringtoneId?.let { putExtra(EXTRA_RINGTONE_ID, it) }
+                    putExtra(EXTRA_RINGTONE_VOLUME_PERCENT, ringtoneVolumePercent)
+                    hapticsPatternName?.let { putExtra(EXTRA_HAPTICS_PATTERN, it) }
+                    putExtra(EXTRA_HAPTICS_ONLY, hapticsOnly)
+                    putExtra(EXTRA_HAPTICS_ESCALATE_OVER_TIME, hapticsEscalateOverTime)
                 },
             )
         }
@@ -426,6 +521,11 @@ class AlarmAlertService : Service() {
             hour: Int,
             minute: Int,
             snoozeMinutes: Int,
+            ringtoneId: String?,
+            ringtoneVolumePercent: Int,
+            hapticsPatternName: String?,
+            hapticsOnly: Boolean,
+            hapticsEscalateOverTime: Boolean,
         ) {
             context.startService(
                 Intent(context, AlarmAlertService::class.java).apply {
@@ -436,6 +536,11 @@ class AlarmAlertService : Service() {
                     putExtra(EXTRA_MINUTE, minute)
                     putExtra(EXTRA_SNOOZE_MINUTES, snoozeMinutes)
                     putExtra(EXTRA_IS_SNOOZE, false)
+                    ringtoneId?.let { putExtra(EXTRA_RINGTONE_ID, it) }
+                    putExtra(EXTRA_RINGTONE_VOLUME_PERCENT, ringtoneVolumePercent)
+                    hapticsPatternName?.let { putExtra(EXTRA_HAPTICS_PATTERN, it) }
+                    putExtra(EXTRA_HAPTICS_ONLY, hapticsOnly)
+                    putExtra(EXTRA_HAPTICS_ESCALATE_OVER_TIME, hapticsEscalateOverTime)
                 },
             )
         }
