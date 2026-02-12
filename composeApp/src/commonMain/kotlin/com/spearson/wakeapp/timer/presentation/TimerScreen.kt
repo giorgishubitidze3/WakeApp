@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,7 +55,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.spearson.wakeapp.interval_alarm.domain.model.AlarmRingtoneOption
 import kotlin.math.abs
@@ -548,7 +548,21 @@ private fun DurationWheelColumn(
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val snapFlingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
     var shouldEmitUserSelection by remember(valuesSize) { mutableStateOf(false) }
-    val itemHeightPx = with(LocalDensity.current) { TIMER_WHEEL_ITEM_HEIGHT.roundToPx() }
+    val centerIndex by remember(listState, valuesSize) {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val visibleItems = layoutInfo.visibleItemsInfo
+            if (visibleItems.isEmpty()) {
+                listState.firstVisibleItemIndex
+            } else {
+                val viewportCenter = layoutInfo.viewportStartOffset +
+                    (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset) / 2
+                visibleItems.minByOrNull { itemInfo ->
+                    abs((itemInfo.offset + (itemInfo.size / 2)) - viewportCenter)
+                }?.index ?: listState.firstVisibleItemIndex
+            }
+        }
+    }
 
     LaunchedEffect(selectedValue, values) {
         if (listState.isScrollInProgress) return@LaunchedEffect
@@ -571,8 +585,6 @@ private fun DurationWheelColumn(
                     return@collect
                 }
                 if (!shouldEmitUserSelection) return@collect
-                val offsetStep = if (listState.firstVisibleItemScrollOffset >= itemHeightPx / 2) 1 else 0
-                val centerIndex = listState.firstVisibleItemIndex + offsetStep
                 val updatedValue = values[centerIndex % valuesSize]
                 onValueSelectedState.value(updatedValue)
                 shouldEmitUserSelection = false
@@ -583,38 +595,42 @@ private fun DurationWheelColumn(
         state = listState,
         modifier = modifier.height(TIMER_WHEEL_VISIBLE_HEIGHT),
         flingBehavior = snapFlingBehavior,
-        contentPadding = PaddingValues(vertical = TIMER_WHEEL_ITEM_HEIGHT * TIMER_WHEEL_CENTER_OFFSET),
+        contentPadding = PaddingValues(
+            vertical = (TIMER_WHEEL_VISIBLE_HEIGHT - TIMER_WHEEL_ITEM_HEIGHT) / 2
+        ),
     ) {
         items(count = wheelItemCount) { index ->
             val value = values[index % valuesSize]
-            val offsetStep = if (listState.firstVisibleItemScrollOffset >= itemHeightPx / 2) 1 else 0
-            val centerIndex = listState.firstVisibleItemIndex + offsetStep
             val distanceFromCenter = abs(index - centerIndex)
             val isCenterItem = distanceFromCenter == 0
-            Text(
-                text = value.toString().padStart(2, '0'),
-                style = if (isCenterItem) {
-                    MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold)
-                } else {
-                    MaterialTheme.typography.headlineSmall
-                },
-                color = if (isCenterItem) {
-                    Color.White
-                } else {
-                    TimerWheelFaded.copy(
-                        alpha = when (distanceFromCenter) {
-                            1 -> 0.7f
-                            2 -> 0.38f
-                            else -> 0.2f
-                        },
-                    )
-                },
-                textAlign = TextAlign.Center,
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(TIMER_WHEEL_ITEM_HEIGHT)
-                    .padding(vertical = 2.dp),
-            )
+                    .height(TIMER_WHEEL_ITEM_HEIGHT),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = value.toString().padStart(2, '0'),
+                    style = if (isCenterItem) {
+                        MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold)
+                    } else {
+                        MaterialTheme.typography.headlineSmall
+                    },
+                    color = if (isCenterItem) {
+                        Color.White
+                    } else {
+                        TimerWheelFaded.copy(
+                            alpha = when (distanceFromCenter) {
+                                1 -> 0.7f
+                                2 -> 0.38f
+                                else -> 0.2f
+                            },
+                        )
+                    },
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }
@@ -725,6 +741,5 @@ private val TimerChipBackground = Color(0xFF111E35)
 private val TIMER_WHEEL_HEIGHT = 170.dp
 private val TIMER_WHEEL_VISIBLE_HEIGHT = 146.dp
 private val TIMER_WHEEL_ITEM_HEIGHT = 40.dp
-private val TIMER_WHEEL_SELECTION_OFFSET = (-2).dp
-private const val TIMER_WHEEL_CENTER_OFFSET = 1
+private val TIMER_WHEEL_SELECTION_OFFSET = 0.dp
 private const val TIMER_WHEEL_REPEAT_CYCLES = 100
