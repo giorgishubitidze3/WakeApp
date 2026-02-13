@@ -61,6 +61,7 @@ fun StopwatchScreen(
                 .fillMaxSize()
                 .padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = state.elapsedMillis.toStopwatchLabel(),

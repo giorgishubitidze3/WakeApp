@@ -216,7 +216,7 @@ class AlarmAlertService : Service() {
 
         val creatorOptions = ActivityOptions.makeBasic().apply {
             setPendingIntentCreatorBackgroundActivityStartMode(
-                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED,
+                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS,
             )
         }
         return PendingIntent.getActivity(

@@ -68,6 +68,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.platform.LocalDensity
 import com.spearson.wakeapp.interval_alarm.domain.model.AlarmRingtoneOption
 import com.spearson.wakeapp.interval_alarm.domain.model.HapticsPattern
 import com.spearson.wakeapp.core.theme.WakeAppTheme
@@ -758,7 +759,7 @@ private fun Header(
             )
         }
         Text(
-            text = "Set Smart Alarm",
+            text = "Set Alarm",
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onBackground,
         )
@@ -887,7 +888,7 @@ private fun TimeWheel(
                 color = TimeWheelBorderColor,
                 shape = MaterialTheme.shapes.large,
             )
-            .height(WHEEL_VISIBLE_HEIGHT + (WHEEL_OUTER_VERTICAL_PADDING * 2))
+            .height(WHEEL_VISIBLE_HEIGHT + (WHEEL_OUTER_VERTICAL_PADDING * 0.75f))
             .padding(
                 horizontal = WHEEL_OUTER_HORIZONTAL_PADDING,
                 vertical = WHEEL_OUTER_VERTICAL_PADDING,
@@ -1005,6 +1006,7 @@ private fun WheelNumberColumn(
     onValueSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val density = LocalDensity.current
     val onValueSelectedState = rememberUpdatedState(onValueSelected)
     val valuesSize = values.size
     val wheelItemCount = remember(valuesSize) {
@@ -1065,43 +1067,50 @@ private fun WheelNumberColumn(
 
     LazyColumn(
         state = listState,
-        modifier = modifier
-            .height(WHEEL_VISIBLE_HEIGHT),
+        modifier = modifier.height(WHEEL_VISIBLE_HEIGHT),
         flingBehavior = snapFlingBehavior,
-        contentPadding = PaddingValues(vertical = WHEEL_CONTENT_VERTICAL_PADDING),
+        // Use the exact math to ensure the center item snaps to the exact middle
+        contentPadding = PaddingValues(vertical = (WHEEL_VISIBLE_HEIGHT - WHEEL_ITEM_HEIGHT) / 2),
     ) {
         items(count = wheelItemCount) { index ->
             val value = values[index % valuesSize]
             val distanceFromCenter = abs(index - centerIndex)
             val isCenterItem = distanceFromCenter == 0
-            Text(
-                text = formatter(value),
-                style = if (isCenterItem) {
-                    MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = MaterialTheme.typography.headlineMedium.fontSize *
-                            WHEEL_CENTER_TEXT_SIZE_MULTIPLIER,
-                    )
-                } else {
-                    MaterialTheme.typography.titleLarge
-                },
-                color = if (isCenterItem) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                        alpha = when (distanceFromCenter) {
-                            1 -> 0.75f
-                            2 -> 0.4f
-                            else -> 0.2f
-                        },
-                    )
-                },
-                textAlign = TextAlign.Center,
+
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(WHEEL_ITEM_HEIGHT)
-                    .padding(vertical = 2.dp),
-            )
+                    .height(WHEEL_ITEM_HEIGHT), // Rigid slot height
+                contentAlignment = Alignment.Center // Absolute vertical centering
+            ) {
+                Text(
+                    text = formatter(value),
+                    style = if (isCenterItem) {
+                        MaterialTheme.typography.headlineMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = MaterialTheme.typography.headlineMedium.fontSize *
+                                    WHEEL_CENTER_TEXT_SIZE_MULTIPLIER,
+                            // Line height helps the font's internal bounding box stay centered
+                            lineHeight = with(density) { WHEEL_ITEM_HEIGHT.toSp() }
+                        )
+                    } else {
+                        MaterialTheme.typography.titleLarge
+                    },
+                    color = if (isCenterItem) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                            alpha = when (distanceFromCenter) {
+                                1 -> 0.4f // Lowered alpha slightly for better contrast
+                                else -> 0.15f
+                            },
+                        )
+                    },
+                    textAlign = TextAlign.Center
+                    // REMOVED: .height(WHEEL_ITEM_HEIGHT) from the Text itself
+                    // Allowing the Box to handle the alignment prevents baseline "clumping"
+                )
+            }
         }
     }
 }
@@ -1160,43 +1169,52 @@ private fun WheelTextColumn(
             }
     }
 
+    val verticalContentPadding = ((visibleHeight - WHEEL_ITEM_HEIGHT) / 2).coerceAtLeast(0.dp)
+
     LazyColumn(
         state = listState,
-        modifier = modifier.height(visibleHeight),
+        modifier = modifier
+            .height(visibleHeight),
         flingBehavior = snapFlingBehavior,
-        contentPadding = PaddingValues(vertical = WHEEL_CONTENT_VERTICAL_PADDING),
+        contentPadding = PaddingValues(vertical = verticalContentPadding),
     ) {
         items(count = valuesSize) { index ->
             val value = values[index]
             val distanceFromCenter = abs(index - centerIndex)
             val isCenterItem = distanceFromCenter == 0
-            Text(
-                text = value,
-                style = if (isCenterItem) {
-                    MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = MaterialTheme.typography.titleLarge.fontSize *
-                            WHEEL_CENTER_TEXT_SIZE_MULTIPLIER,
-                    )
-                } else {
-                    MaterialTheme.typography.titleMedium
-                },
-                color = if (isCenterItem) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                        alpha = when (distanceFromCenter) {
-                            1 -> 0.7f
-                            else -> 0.2f
-                        },
-                    )
-                },
-                textAlign = TextAlign.Center,
+
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(WHEEL_ITEM_HEIGHT)
-                    .padding(vertical = 2.dp),
-            )
+                    .height(WHEEL_ITEM_HEIGHT),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = value,
+                    style = if (isCenterItem) {
+                        MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = MaterialTheme.typography.titleLarge.fontSize *
+                                WHEEL_MERIDIEM_CENTER_TEXT_SIZE_MULTIPLIER,
+                        )
+                    } else {
+                        MaterialTheme.typography.titleMedium
+                    },
+                    color = if (isCenterItem) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                            alpha = when (distanceFromCenter) {
+                                1 -> 0.7f
+                                else -> 0.2f
+                            },
+                        )
+                    },
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }
@@ -1302,7 +1320,7 @@ private fun IntervalInputCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(4.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -1397,7 +1415,7 @@ private fun ToggleCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1462,7 +1480,7 @@ private fun SettingCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1570,12 +1588,12 @@ private const val WHEEL_REPEAT_CYCLES = 200
 private val WHEEL_ITEM_HEIGHT = 40.dp
 private val WHEEL_SELECTION_OFFSET = 4.dp
 private val WHEEL_VISIBLE_HEIGHT = (WHEEL_ITEM_HEIGHT * 4) + (WHEEL_SELECTION_OFFSET * 2)
-private val WHEEL_MERIDIEM_VISIBLE_HEIGHT = (WHEEL_ITEM_HEIGHT * 2) + (WHEEL_SELECTION_OFFSET * 2)
-private val WHEEL_CONTENT_VERTICAL_PADDING = WHEEL_ITEM_HEIGHT / 1.25f
+private val WHEEL_MERIDIEM_VISIBLE_HEIGHT = (WHEEL_ITEM_HEIGHT * 3) + (WHEEL_SELECTION_OFFSET * 2)
 private val WHEEL_OUTER_HORIZONTAL_PADDING = 6.dp
-private val WHEEL_OUTER_VERTICAL_PADDING = 6.dp
+private val WHEEL_OUTER_VERTICAL_PADDING = 2.dp
 private val WHEEL_EDGE_FADE_HEIGHT = 28.dp
 private const val WHEEL_CENTER_TEXT_SIZE_MULTIPLIER = 1.08f
+private const val WHEEL_MERIDIEM_CENTER_TEXT_SIZE_MULTIPLIER = 1.0f
 
 private val IntervalEditorBackground = Color(0xFF0F1729)
 private val SaveFooterTopBorder = Color(0xFF1E293B)

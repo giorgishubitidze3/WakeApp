@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -69,6 +70,10 @@ fun NavigationRoot(
                             label = { Text(destination.label) },
                             colors = NavigationBarItemDefaults.colors(
                                 indicatorColor = Color.Transparent,
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                unselectedIconColor = BottomNavItemColor,
+                                unselectedTextColor = BottomNavItemColor,
                             ),
                         )
                     }
@@ -132,6 +137,7 @@ private val topLevelDestinations = listOf(
 )
 
 private val BottomNavBackground = Color(0xFF0A0A0A)
+private val BottomNavItemColor = Color(0xFFB9C5D9)
 
 private fun NavDestination?.isTopLevelDestination(): Boolean {
     if (this == null) return false
